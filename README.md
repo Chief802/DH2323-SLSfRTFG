@@ -558,3 +558,14 @@ static Vector3 ParallelTransport(Vector3 n, Vector3 from, Vector3 to)
 }
 ```
 
+### 2026 August 5 \- Evaluation and Final Floral Instances
+
+After a break during the summer, a recap is due for the final parts of the project. To begin with, the aim is to implement supervisor feedback to finalize the coding aspects of the project. Then, a written report is to be created in addition to taking the project specification to its last iteration. Creating a short demo where one can play around, in addition to a video showcasing the program, is something we want to do as well.
+
+A summary of the most recent feedback received is as follows:
+
+* The project is looking "very good" for an A! (That's the goal!)
+* We could tap into evaluation. This would entail giving specifics for (1) evaluation challenges and (2) methods that could be used, with references included of course. 
+* We could focus on evaluating a specific plant instead: "beyond that, [...] simulat(ing) the growth of a very specific plant type". For this purpose we would find a relevant plant with previous literature in its investigation to base the final version of the project off of.
+
+I am preliminarily wary that previous work regarding the efficacy of L-Systems for Real Time use is small in numbers, if there is any at all. In that case, the goal is to instead provide a potential baseline. This could for example be via the aforementioned very specific plant, described in previous work, that has parameters as well as stochastic elements in its creation.

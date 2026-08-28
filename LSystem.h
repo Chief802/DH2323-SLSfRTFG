@@ -23,7 +23,8 @@ enum class NodeType : int
 {
     Branch = 0,
     Leaf = 1,
-    Flower = 2
+    Flower = 2,
+    Fruit = 3
 };
 
 /**
@@ -254,7 +255,7 @@ namespace detail
         }
     }
 
-} // namespace detail
+} 
 
 // =============================================================
 //  InterpretFull  –  primary interpreter, emits PlantNode
@@ -263,16 +264,19 @@ namespace detail
  * Walks the sentence with a 3-D turtle and writes PlantNode values.
  *
  * Symbol semantics (parametric overrides in parentheses):
- *   F(l)   Draw forward, step = l or defaultStep              → Branch node
- *   f(l)   Move forward, no geometry
- *   ~(s)   Emit a Leaf  at current position, size = s
- *   @(s)   Emit a Flower at current position, size = s
- *   !(w)   Set current radius to w  (absolute, not relative)
- *   + -    Turn   left / right    (param[0] = angle override °)
- *   & ^    Pitch  down / up
- *   \ /    Roll   left / right
- *   |      U-turn (180°)
- *   [ ]    Push / pop turtle state;  radius × √½ on push (pipe model)
+ *  F(l)   Draw forward, step = l or defaultStep              → Branch node
+ *  f(l)   Move forward, no geometry
+ *  ~(s)   Emit a Leaf  at current position, size = s
+ *  @(s)   Emit a Flower at current position, size = s
+ *  x(s)   Emit a heart-shaped fruit pod at current position, size = s
+ *  L(s)   Leaf that scales with age
+ *  K(s)   Flower that scales with age
+ *  !(w)   Set current radius to w  (absolute, not relative)
+ *  + -    Turn   left / right    (param[0] = angle override °)
+ *  & ^    Pitch  down / up
+ *  \ /    Roll   left / right
+ *  |      U-turn (180°)
+ *  [ ]    Push / pop turtle state;  radius × √½ on push (pipe model)
  *
  * @return  Number of PlantNode values written (<= maxNodes).
  */
@@ -338,15 +342,21 @@ inline int InterpretFull(
         case '~': // Leaf
             emit(NodeType::Leaf, sym.param(0, 0.3f), turtle.pos);
             break;
-
         case '@': // Flower
             emit(NodeType::Flower, sym.param(0, 0.15f), turtle.pos);
             break;
-
+        case 'x': // Heart-shaped fruit pod (Silique)
+            emit(NodeType::Fruit, sym.param(0, 0.25f), turtle.pos);
+            break;
+        case 'L': // Crocus parameter-driven leaf (scale increases with age t)
+            emit(NodeType::Leaf, sym.param(0, 0.0f) * 0.05f + 0.1f, turtle.pos);
+            break;
+        case 'K': // Crocus parameter-driven flower (scale increases with age t)
+            emit(NodeType::Flower, sym.param(0, 0.0f) * 0.15f + 0.2f, turtle.pos);
+            break;
         case '!': // Set radius
             turtle.radius = sym.param(0, turtle.radius);
             break;
-
         case '+':
             RotateTurtle(turtle, 'U', angleOf(sym));
             break;

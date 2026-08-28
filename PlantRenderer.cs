@@ -24,7 +24,7 @@ public class PlantRenderer : MonoBehaviour
     }
 
     /// <summary>Defines the biological category of a generated node.</summary>
-    public enum NodeType : int { Branch = 0, Leaf = 1, Flower = 2 }
+    public enum NodeType : int { Branch = 0, Leaf = 1, Flower = 2, Fruit = 3 }
 
     /// <summary>
     /// Represents a single segment or element of the plant, mapped directly to the native C++ struct.
@@ -172,18 +172,15 @@ public class PlantRenderer : MonoBehaviour
     }
 
     // Configuration Enums
-    public enum TreeType { ParametricTree, StochasticShrub, HybridPlant, ABOPTree, CustomBloomingTree }
-    public enum LeafShape { Teardrop, Oval, Compound, Needle }
-    public enum FlowerShape { FivePetal, Daisy, TulipCup, StarBurst }
+    public enum TreeType { CapsellaBursaPastoris , Crocus}
+    public enum LeafShape { Teardrop, Oval, Compound, Needle, LobedRosette }
+    public enum FlowerShape { FivePetal, Daisy, Cup, StarBurst, CrossFourPetal }
 
     // Maps TreeType profiles to specific leaf and flower shapes
     static readonly Dictionary<TreeType, (LeafShape leaf, FlowerShape flower)> TypeShapes = new()
     {
-        [TreeType.ParametricTree] = (LeafShape.Teardrop, FlowerShape.FivePetal),
-        [TreeType.StochasticShrub] = (LeafShape.Oval, FlowerShape.Daisy),
-        [TreeType.HybridPlant] = (LeafShape.Compound, FlowerShape.TulipCup),
-        [TreeType.ABOPTree] = (LeafShape.Needle, FlowerShape.StarBurst),
-        [TreeType.CustomBloomingTree] = (LeafShape.Compound, FlowerShape.FivePetal),
+        [TreeType.CapsellaBursaPastoris] = (LeafShape.LobedRosette, FlowerShape.CrossFourPetal),
+        [TreeType.Crocus] = (LeafShape.Needle, FlowerShape.Cup), 
     };
 
     /// <summary>Settings to dictate mesh resolution at various camera distances.</summary>
@@ -199,7 +196,7 @@ public class PlantRenderer : MonoBehaviour
     struct NodeAnim { public float StartT, EndT; public bool IsNew; }
 
     [Header("L-System")]
-    public TreeType treeType = TreeType.ABOPTree;
+    public TreeType treeType = TreeType.CapsellaBursaPastoris;
     public int iterations = 4;
     public uint seed = 67;
 
@@ -216,6 +213,11 @@ public class PlantRenderer : MonoBehaviour
     public float flowerScale = 1.0f;
     [Range(0f, 1f)] public float petalCurvature = 0.3f;
     public Material flowerMaterial;
+
+    [Header("Fruit Geometry")]
+    public float fruitScale = 1.0f;
+
+    public Material fruitMaterial;
 
     [Header("LOD")]
     public LodSettings[] lodSettings = new[]
@@ -235,7 +237,7 @@ public class PlantRenderer : MonoBehaviour
     public bool continuousMode = false;
     public float stepInterval = 3.0f;
     public int maxIterations = 8;
-    
+
     // Memory Pre-allocations to prevent GC spikes during generation
     const int MAX_NODES = 200_000;
     readonly PlantNode[] _nodeBuffer = new PlantNode[MAX_NODES];
@@ -243,6 +245,7 @@ public class PlantRenderer : MonoBehaviour
     List<PlantNode> _curBranches = new();
     List<PlantNode> _curLeaves = new();
     List<PlantNode> _curFlowers = new();
+    List<PlantNode> _curFruits = new();
     BranchGraph _cachedGraph;
 
     readonly HashSet<ulong> _knownHashes = new();
@@ -269,10 +272,12 @@ public class PlantRenderer : MonoBehaviour
     Mesh _stableBranchMesh, _growingBranchMesh;
     Mesh _stableLeafMesh, _growingLeafMesh;
     Mesh _stableFlowerMesh, _growingFlowerMesh;
+    Mesh _stableFruitMesh, _growingFruitMesh;
 
     GameObject _stableBranchGO, _growingBranchGO;
     GameObject _stableLeafGO, _growingLeafGO;
     GameObject _stableFlowerGO, _growingFlowerGO;
+    GameObject _stableFruitGO, _growingFruitGO;
 
     /// <summary>External call to the native C++ library handling the mathematical L-System generation.</summary>
     [DllImport("libPlantSim", CallingConvention = CallingConvention.Cdecl)]
@@ -287,6 +292,8 @@ public class PlantRenderer : MonoBehaviour
         _growingLeafMesh = CreateMesh("Leaves-Growing", true);
         _stableFlowerMesh = CreateMesh("Flowers-Stable", false);
         _growingFlowerMesh = CreateMesh("Flowers-Growing", true);
+        _stableFruitMesh = CreateMesh("Fruits-Stable", false);
+        _growingFruitMesh = CreateMesh("Fruits-Growing", true);
 
         // Bind meshes to visible GameObjects
         _stableBranchGO = MakeChild("Branches-Stable", _stableBranchMesh, branchMaterial);
@@ -295,6 +302,8 @@ public class PlantRenderer : MonoBehaviour
         _growingLeafGO = MakeChild("Leaves-Growing", _growingLeafMesh, leafMaterial);
         _stableFlowerGO = MakeChild("Flowers-Stable", _stableFlowerMesh, flowerMaterial);
         _growingFlowerGO = MakeChild("Flowers-Growing", _growingFlowerMesh, flowerMaterial);
+        _stableFruitGO = MakeChild("Fruits-Stable", _stableFruitMesh, fruitMaterial);
+        _growingFruitGO = MakeChild("Fruits-Growing", _growingFruitMesh, fruitMaterial);
 
         _currentRadialSegs = radialSegments;
     }
@@ -330,11 +339,10 @@ public class PlantRenderer : MonoBehaviour
     {
         var kb = Keyboard.current;
         if (kb == null) return;
-        
+
         // Debugging inputs to increment iterations, randomize seed, and swap plant type
         if (kb.spaceKey.wasPressedThisFrame) { iterations++; Generate(animate: true); }
         if (kb.rKey.wasPressedThisFrame) { seed = (uint)UnityEngine.Random.Range(1, int.MaxValue); Generate(animate: true); }
-        if (kb.digit1Key.wasPressedThisFrame) { treeType = TreeType.ParametricTree; Generate(animate: false); }
     }
 
     /// <summary>Handles automatic incremental growth over time when Continuous Mode is enabled.</summary>
@@ -343,7 +351,7 @@ public class PlantRenderer : MonoBehaviour
         if (!continuousMode || !_continuousTimerArmed || _growthCoroutine != null) return;
         _continuousTimer -= Time.deltaTime;
         if (_continuousTimer > 0f) return;
-        
+
         _continuousTimerArmed = false;
         if (iterations >= maxIterations) return;
         iterations++;
@@ -369,7 +377,7 @@ public class PlantRenderer : MonoBehaviour
 
         float dist = Vector3.Distance(cam.transform.position, transform.position);
         int newLod = lodSettings.Length - 1;
-        
+
         // Determine correct LOD tier
         for (int i = 0; i < lodSettings.Length; i++)
             if (dist <= lodSettings[i].maxDistance) { newLod = i; break; }
@@ -377,7 +385,7 @@ public class PlantRenderer : MonoBehaviour
         if (newLod == _activeLod) return;
         _activeLod = newLod;
         _currentRadialSegs = lodSettings[_activeLod].branchRadialSegments;
-        
+
         RebuildAllFull(); // Force a rebuild if the LOD tier changes
     }
 
@@ -399,6 +407,7 @@ public class PlantRenderer : MonoBehaviour
         _curBranches.Clear();
         _curLeaves.Clear();
         _curFlowers.Clear();
+        _curFruits.Clear();
 
         // 2. Sort nodes by type
         for (int i = 0; i < count; i++)
@@ -407,6 +416,7 @@ public class PlantRenderer : MonoBehaviour
                 case NodeType.Branch: _curBranches.Add(_nodeBuffer[i]); break;
                 case NodeType.Leaf: _curLeaves.Add(_nodeBuffer[i]); break;
                 case NodeType.Flower: _curFlowers.Add(_nodeBuffer[i]); break;
+                case NodeType.Fruit: _curFruits.Add(_nodeBuffer[i]); break;
             }
 
         // 3. Build topologic relationships between branches
@@ -423,6 +433,7 @@ public class PlantRenderer : MonoBehaviour
             BuildBranchMesh(BuildMode.Stable, _stableBranchMesh);
             BuildLeafMesh(_curLeaves, leafShape, leafDetail, true, FilterMode.OnlyOld, _stableLeafMesh);
             BuildFlowerMesh(_curFlowers, flowerShape, true, FilterMode.OnlyOld, _stableFlowerMesh);
+            BuildFruitMesh(_curFruits, true, FilterMode.OnlyOld, _stableFruitMesh);
 
             RefreshKnownHashes();
             _animProgress = 0f;
@@ -445,6 +456,7 @@ public class PlantRenderer : MonoBehaviour
         foreach (var n in _curBranches) _knownHashes.Add(NodeHash(n));
         foreach (var n in _curLeaves) _knownHashes.Add(NodeHash(n));
         foreach (var n in _curFlowers) _knownHashes.Add(NodeHash(n));
+        foreach (var n in _curFruits) _knownHashes.Add(NodeHash(n));
     }
 
     /// <summary>
@@ -497,7 +509,7 @@ public class PlantRenderer : MonoBehaviour
 
             _timeline[h] = a;
             var key = Quantize(_curBranches[i].end);
-            
+
             if (!tipEndT.TryGetValue(key, out float prev) || segEndT[i] > prev)
                 tipEndT[key] = segEndT[i];
         }
@@ -529,6 +541,7 @@ public class PlantRenderer : MonoBehaviour
 
         AssignFoliage(_curLeaves);
         AssignFoliage(_curFlowers);
+        AssignFoliage(_curFruits);
     }
 
     /// <summary>Coroutine handling the frame-by-frame mesh update of "new" segments.</summary>
@@ -547,6 +560,7 @@ public class PlantRenderer : MonoBehaviour
             BuildBranchMesh(BuildMode.Growing, _growingBranchMesh);
             BuildLeafMesh(_curLeaves, leafShape, leafDetail, false, FilterMode.OnlyNew, _growingLeafMesh);
             BuildFlowerMesh(_curFlowers, flowerShape, false, FilterMode.OnlyNew, _growingFlowerMesh);
+            BuildFruitMesh(_curFruits, false, FilterMode.OnlyNew, _growingFruitMesh);
 
             yield return null;
         }
@@ -567,10 +581,12 @@ public class PlantRenderer : MonoBehaviour
         BuildBranchMesh(BuildMode.Full, _stableBranchMesh);
         BuildLeafMesh(_curLeaves, leafShape, leafDetail, true, FilterMode.All, _stableLeafMesh);
         BuildFlowerMesh(_curFlowers, flowerShape, true, FilterMode.All, _stableFlowerMesh);
+        BuildFruitMesh(_curFruits, true, FilterMode.All, _stableFruitMesh);
 
         _growingBranchMesh.Clear();
         _growingLeafMesh.Clear();
         _growingFlowerMesh.Clear();
+        _growingFruitMesh.Clear();
     }
 
     /// <summary>Gets the 0 to 1 normalized growth state of a node based on current animation time.</summary>
@@ -655,7 +671,7 @@ public class PlantRenderer : MonoBehaviour
                 int sn = (s + 1) % R;
                 int b0 = baseStart + s, b1 = baseStart + sn;
                 int t0 = tipRingStart[idx] + s, t1 = tipRingStart[idx] + sn;
-                
+
                 // Two triangles per quad segment
                 _tris.Add(b0); _tris.Add(b1); _tris.Add(t0);
                 _tris.Add(t0); _tris.Add(b1); _tris.Add(t1);
@@ -712,6 +728,7 @@ public class PlantRenderer : MonoBehaviour
                 case LeafShape.Oval: EmitOval(pos, fwd, right, faceN, size, lodDetail); break;
                 case LeafShape.Compound: EmitCompound(pos, fwd, right, faceN, size); break;
                 case LeafShape.Needle: EmitNeedle(pos, fwd, right, faceN, size); break;
+                case LeafShape.LobedRosette: EmitLobedRosette(pos, fwd, right, faceN, size); break;
             }
         }
 
@@ -744,9 +761,39 @@ public class PlantRenderer : MonoBehaviour
             {
                 case FlowerShape.FivePetal: EmitRadialFlower(center, axis, right, up2, size, 5, 0.25f, 0.28f, petalCurvature); break;
                 case FlowerShape.Daisy: EmitRadialFlower(center, axis, right, up2, size, 12, 0.18f, 0.14f, 0.06f); break;
-                case FlowerShape.TulipCup: EmitTulip(center, axis, right, up2, size); break;
+                case FlowerShape.Cup: EmitCup(center, axis, right, up2, size); break;
                 case FlowerShape.StarBurst: EmitStar(center, axis, right, up2, size); break;
+                case FlowerShape.CrossFourPetal: EmitCrossFourPetal(center, axis, right, up2, size); break;
             }
+        }
+
+        FlushToMesh(targetMesh);
+    }
+
+    /// <summary>Generates geometry for fruit depending on current tree type settings.</summary>
+    void BuildFruitMesh(List<PlantNode> nodes, bool fullyGrown, FilterMode filter, Mesh targetMesh)
+    {
+        _verts.Clear(); _norms.Clear(); _uvs.Clear(); _tris.Clear();
+
+        foreach (var node in nodes)
+        {
+            ulong h = NodeHash(node);
+            bool isNew = _timeline.TryGetValue(h, out var a) && a.IsNew;
+
+            if (filter == FilterMode.OnlyOld && isNew) continue;
+            if (filter == FilterMode.OnlyNew && !isNew) continue;
+
+            float growT = fullyGrown ? 1f : GetGrowth(node, foliage: true);
+            if (growT < 0.01f) continue;
+
+            Vector3 pos = node.origin;
+            Vector3 fwd = ((Vector3)node.heading).normalized;
+            Vector3 right = ((Vector3)node.left).normalized;
+            Vector3 faceN = Vector3.Cross(fwd, right).normalized;
+            float size = node.radius * fruitScale * growT;
+
+            // Binds fruit to the existing obcordate silique generator
+            EmitHeartPod(pos, fwd, right, faceN, size); 
         }
 
         FlushToMesh(targetMesh);
@@ -820,6 +867,92 @@ public class PlantRenderer : MonoBehaviour
         EmitDoubleSidedQuad(pos, pos + right * hw, pos + fwd * size, pos - right * hw, n);
     }
 
+    /// <summary>Generates jagged basal rosette leaf geometry typical of Capsella bursa-pastoris.</summary>
+    void EmitLobedRosette(Vector3 pos, Vector3 fwd, Vector3 right, Vector3 n, float size)
+    {
+        float len = size * 1.4f;
+        int lobes = 4;
+        for (int i = 0; i < lobes; i++)
+        {
+            float t = (i + 1f) / (lobes + 1f);
+            Vector3 p = pos + fwd * (len * t);
+            float lw = size * (0.35f * Mathf.Sin(t * Mathf.PI));
+            EmitTeardrop(p, (fwd + right * 0.8f).normalized, right, n, lw);
+            EmitTeardrop(p, (fwd - right * 0.8f).normalized, -right, -n, lw);
+        }
+        EmitTeardrop(pos + fwd * len * 0.9f, fwd, right, n, size * 0.3f);
+    }
+
+    /// <summary>Generates Brassicaceae 4-petal cross-shaped flower geometry.</summary>
+    void EmitCrossFourPetal(Vector3 center, Vector3 axis, Vector3 right, Vector3 up2, float size)
+    {
+        float discR = size * 0.15f;
+        float petalLen = size * 0.85f;
+        float hw = size * 0.32f;
+
+        for (int p = 0; p < 4; p++)
+        {
+            float a = p * Mathf.PI * 0.5f; // 90-degree angle offsets
+            Vector3 pd = (Mathf.Cos(a) * right + Mathf.Sin(a) * up2).normalized;
+            Vector3 lat = Vector3.Cross(pd, axis).normalized;
+            Vector3 rC = center + pd * discR;
+            Vector3 tC = center + pd * petalLen + axis * (petalLen * petalCurvature);
+            Vector3 pn = (axis + pd * petalCurvature).normalized;
+
+            int pb = _verts.Count;
+            _verts.Add(rC - lat * (hw * 0.3f));
+            _verts.Add(rC + lat * (hw * 0.3f));
+            _verts.Add(tC + lat * hw);
+            _verts.Add(tC - lat * hw);
+
+            for (int k = 0; k < 4; k++) _norms.Add(pn);
+            _uvs.Add(Vector2.zero); _uvs.Add(new Vector2(1, 0)); _uvs.Add(Vector2.one); _uvs.Add(new Vector2(0, 1));
+
+            _tris.Add(pb); _tris.Add(pb + 1); _tris.Add(pb + 2); _tris.Add(pb); _tris.Add(pb + 2); _tris.Add(pb + 3);
+            _tris.Add(pb); _tris.Add(pb + 2); _tris.Add(pb + 1); _tris.Add(pb); _tris.Add(pb + 3); _tris.Add(pb + 2);
+        }
+    }
+
+    /// <summary>Generates iconic obcordate (heart-shaped) silique seed pod geometry.</summary>
+    void EmitHeartPod(Vector3 pos, Vector3 fwd, Vector3 right, Vector3 n, float size)
+    {
+        float h = size * 1.2f;
+        float w = size * 0.95f;
+
+        Vector3 pBase = pos;
+        Vector3 pL = pos + fwd * (h * 0.65f) - right * (w * 0.5f);
+        Vector3 pR = pos + fwd * (h * 0.65f) + right * (w * 0.5f);
+        Vector3 pTipL = pos + fwd * h - right * (w * 0.35f);
+        Vector3 pTipR = pos + fwd * h + right * (w * 0.35f);
+        Vector3 pNotch = pos + fwd * (h * 0.82f);
+
+        // Front Face
+        int b = _verts.Count;
+        _verts.Add(pBase); _verts.Add(pL); _verts.Add(pTipL);
+        _verts.Add(pNotch); _verts.Add(pTipR); _verts.Add(pR);
+        for (int k = 0; k < 6; k++) _norms.Add(n);
+        _uvs.Add(new Vector2(0.5f, 0f)); _uvs.Add(new Vector2(0f, 0.6f)); _uvs.Add(new Vector2(0.2f, 1f));
+        _uvs.Add(new Vector2(0.5f, 0.8f)); _uvs.Add(new Vector2(0.8f, 1f)); _uvs.Add(new Vector2(1f, 0.6f));
+
+        _tris.Add(b); _tris.Add(b + 1); _tris.Add(b + 2);
+        _tris.Add(b); _tris.Add(b + 2); _tris.Add(b + 3);
+        _tris.Add(b); _tris.Add(b + 3); _tris.Add(b + 4);
+        _tris.Add(b); _tris.Add(b + 4); _tris.Add(b + 5);
+
+        // Back Face
+        b = _verts.Count;
+        _verts.Add(pBase); _verts.Add(pL); _verts.Add(pTipL);
+        _verts.Add(pNotch); _verts.Add(pTipR); _verts.Add(pR);
+        for (int k = 0; k < 6; k++) _norms.Add(-n);
+        _uvs.Add(new Vector2(0.5f, 0f)); _uvs.Add(new Vector2(0f, 0.6f)); _uvs.Add(new Vector2(0.2f, 1f));
+        _uvs.Add(new Vector2(0.5f, 0.8f)); _uvs.Add(new Vector2(0.8f, 1f)); _uvs.Add(new Vector2(1f, 0.6f));
+
+        _tris.Add(b); _tris.Add(b + 2); _tris.Add(b + 1);
+        _tris.Add(b); _tris.Add(b + 3); _tris.Add(b + 2);
+        _tris.Add(b); _tris.Add(b + 4); _tris.Add(b + 3);
+        _tris.Add(b); _tris.Add(b + 5); _tris.Add(b + 4);
+    }
+
     /// <summary>Helper method to ensure foliage can be seen from both sides without writing a custom shader.</summary>
     void EmitDoubleSidedQuad(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Vector3 n)
     {
@@ -862,14 +995,14 @@ public class PlantRenderer : MonoBehaviour
             _verts.Add(rC - lat * hw); _verts.Add(rC + lat * hw); _verts.Add(tC + lat * hw * 0.35f); _verts.Add(tC - lat * hw * 0.35f);
             for (int k = 0; k < 4; k++) _norms.Add(pn);
             _uvs.Add(Vector2.zero); _uvs.Add(new Vector2(1, 0)); _uvs.Add(Vector2.one); _uvs.Add(new Vector2(0, 1));
-            
+
             // Double-sided quad layout
             _tris.Add(pb); _tris.Add(pb + 1); _tris.Add(pb + 2); _tris.Add(pb); _tris.Add(pb + 2); _tris.Add(pb + 3);
             _tris.Add(pb); _tris.Add(pb + 2); _tris.Add(pb + 1); _tris.Add(pb); _tris.Add(pb + 3); _tris.Add(pb + 2);
         }
     }
 
-    void EmitTulip(Vector3 center, Vector3 axis, Vector3 right, Vector3 up2, float size)
+    void EmitCup(Vector3 center, Vector3 axis, Vector3 right, Vector3 up2, float size)
     {
         float discR = size * 0.18f, pLen = size, pW = size * 0.32f;
         int db = _verts.Count;

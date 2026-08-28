@@ -569,3 +569,7 @@ A summary of the most recent feedback received is as follows:
 * We could focus on evaluating a specific plant instead: "beyond that, [...] simulat(ing) the growth of a very specific plant type". For this purpose we would find a relevant plant with previous literature in its investigation to base the final version of the project off of.
 
 I am preliminarily wary that previous work regarding the efficacy of L-Systems for Real Time use is small in numbers, if there is any at all. In that case, the goal is to instead provide a potential baseline. This could for example be via the aforementioned very specific plant, described in previous work, that has parameters as well as stochastic elements in its creation.
+
+### 2026 August 28 \- Plants from Literature
+
+Some old plants have been removed and new ones added directly from previous literature. This is the Capsella bursa-pastoris flower and the Crocus. The first one has additional complexity that makes it interesting to generate. A version of it differing from the literature, with stochastic elements, is to be added as well.

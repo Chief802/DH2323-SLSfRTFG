@@ -51,20 +51,6 @@ struct PlantNode
 // =============================================================
 //  Symbol
 // =============================================================
-/**
- * One token in an L-System sentence.
- *
- * Non-parametric:  Symbol('F')
- * Parametric:      Symbol('F', {0.75f})
- *
- * Turtle symbol conventions used in this library:
- *   'F'  params[0] = step length                  (default = defaultStep)
- *   '+' '-' '&' '^' '\\' '/'
- *        params[0] = angle override in degrees     (default = defaultAngle)
- *   '!'  params[0] = absolute radius value
- *   '~'  params[0] = leaf size
- *   '@'  params[0] = flower size
- */
 struct Symbol
 {
     char letter;
@@ -94,22 +80,12 @@ inline Sentence MakeSentence(const std::string &s)
 // =============================================================
 //  ProductionRule
 // =============================================================
-/**
- * predecessor → successor, optionally guarded by a condition and/or
- * weighted for stochastic selection.
- *
- * Stochastic invariant: the probabilities of all rules that share a
- * predecessor (and whose condition is satisfied) should sum to 1.0.
- */
 struct ProductionRule
 {
     char predecessor;
-    float probability; // Weight used for stochastic selection.  1.0 = deterministic.
+    float probability;
 
-    // Optional guard. nullptr means always eligible.
     std::function<bool(const std::vector<float> &)> condition;
-
-    // Produces the replacement sentence from the symbol's runtime parameters.
     std::function<Sentence(const std::vector<float> &)> successor;
 };
 
@@ -123,29 +99,19 @@ public:
 
     void SetSeed(unsigned int seed) { rng_.seed(seed); }
 
-    // == Rule registration ====================================================
-
     void AddRule(ProductionRule r) { rules_.push_back(std::move(r)); }
 
-    // Deterministic + unconditional shorthand
     void AddRule(char c, std::function<Sentence(const std::vector<float> &)> succ)
     {
         rules_.push_back({c, 1.0f, nullptr, std::move(succ)});
     }
 
-    // Stochastic + unconditional shorthand
     void AddRule(char c, float prob,
                  std::function<Sentence(const std::vector<float> &)> succ)
     {
         rules_.push_back({c, prob, nullptr, std::move(succ)});
     }
 
-    // == Derivation ===========================================================
-
-    /**
-     * One rewriting pass: replace every symbol according to the matching rule.
-     * Symbols with no eligible rule are kept unchanged (identity production).
-     */
     Sentence Step(const Sentence &in)
     {
         Sentence out;
@@ -177,7 +143,6 @@ public:
                 continue;
             }
 
-            // Weighted random selection (degenerates to deterministic if one candidate)
             const ProductionRule *chosen = cands.back().rule;
             if (cands.size() == 1u)
             {
@@ -260,32 +225,14 @@ namespace detail
 // =============================================================
 //  InterpretFull  –  primary interpreter, emits PlantNode
 // =============================================================
-/**
- * Walks the sentence with a 3-D turtle and writes PlantNode values.
- *
- * Symbol semantics (parametric overrides in parentheses):
- *  F(l)   Draw forward, step = l or defaultStep              → Branch node
- *  f(l)   Move forward, no geometry
- *  ~(s)   Emit a Leaf  at current position, size = s
- *  @(s)   Emit a Flower at current position, size = s
- *  x(s)   Emit a heart-shaped fruit pod at current position, size = s
- *  L(s)   Leaf that scales with age
- *  K(s)   Flower that scales with age
- *  !(w)   Set current radius to w  (absolute, not relative)
- *  + -    Turn   left / right    (param[0] = angle override °)
- *  & ^    Pitch  down / up
- *  \ /    Roll   left / right
- *  |      U-turn (180°)
- *  [ ]    Push / pop turtle state;  radius × √½ on push (pipe model)
- *
- * @return  Number of PlantNode values written (<= maxNodes).
- */
 inline int InterpretFull(
     const Sentence &commands,
     float defaultStep,
     float defaultAngleDeg,
     PlantNode *outNodes,
-    int maxNodes)
+    int maxNodes,
+    float baseRadius = 0.15f,
+    float radiusDecay = 0.7071f)
 {
     using namespace detail;
     constexpr float kPi = 3.14159265f;
@@ -296,7 +243,7 @@ inline int InterpretFull(
         {0.f, 0.f, -1.f}, // U
         {-1.f, 0.f, 0.f}, // L
         {0.f, 1.f, 0.f},  // H  (+Y = upward growth)
-        0.2f              // radius
+        baseRadius        // Initial branch width
     };
 
     std::stack<TurtleState> stk;
@@ -317,7 +264,6 @@ inline int InterpretFull(
     {
         switch (sym.letter)
         {
-
         case 'F':
         {
             float step = sym.param(0, defaultStep);
@@ -339,49 +285,23 @@ inline int InterpretFull(
             break;
         }
 
-        case '~': // Leaf
-            emit(NodeType::Leaf, sym.param(0, 0.3f), turtle.pos);
-            break;
-        case '@': // Flower
-            emit(NodeType::Flower, sym.param(0, 0.15f), turtle.pos);
-            break;
-        case 'x': // Heart-shaped fruit pod (Silique)
-            emit(NodeType::Fruit, sym.param(0, 0.25f), turtle.pos);
-            break;
-        case 'L': // Crocus parameter-driven leaf (scale increases with age t)
-            emit(NodeType::Leaf, sym.param(0, 0.0f) * 0.05f + 0.1f, turtle.pos);
-            break;
-        case 'K': // Crocus parameter-driven flower (scale increases with age t)
-            emit(NodeType::Flower, sym.param(0, 0.0f) * 0.15f + 0.2f, turtle.pos);
-            break;
-        case '!': // Set radius
-            turtle.radius = sym.param(0, turtle.radius);
-            break;
-        case '+':
-            RotateTurtle(turtle, 'U', angleOf(sym));
-            break;
-        case '-':
-            RotateTurtle(turtle, 'U', -angleOf(sym));
-            break;
-        case '&':
-            RotateTurtle(turtle, 'L', angleOf(sym));
-            break;
-        case '^':
-            RotateTurtle(turtle, 'L', -angleOf(sym));
-            break;
-        case '\\':
-            RotateTurtle(turtle, 'H', angleOf(sym));
-            break;
-        case '/':
-            RotateTurtle(turtle, 'H', -angleOf(sym));
-            break;
-        case '|':
-            RotateTurtle(turtle, 'U', kPi);
-            break;
+        case '~': emit(NodeType::Leaf, sym.param(0, 0.3f), turtle.pos); break;
+        case '@': emit(NodeType::Flower, sym.param(0, 0.15f), turtle.pos); break;
+        case 'x': emit(NodeType::Fruit, sym.param(0, 0.25f), turtle.pos); break;
+        case 'L': emit(NodeType::Leaf, sym.param(0, 0.0f) * 0.05f + 0.1f, turtle.pos); break;
+        case 'K': emit(NodeType::Flower, sym.param(0, 0.0f) * 0.15f + 0.2f, turtle.pos); break;
+        case '!': turtle.radius = sym.param(0, turtle.radius); break;
+        case '+': RotateTurtle(turtle, 'U', angleOf(sym)); break;
+        case '-': RotateTurtle(turtle, 'U', -angleOf(sym)); break;
+        case '&': RotateTurtle(turtle, 'L', angleOf(sym)); break;
+        case '^': RotateTurtle(turtle, 'L', -angleOf(sym)); break;
+        case '\\': RotateTurtle(turtle, 'H', angleOf(sym)); break;
+        case '/': RotateTurtle(turtle, 'H', -angleOf(sym)); break;
+        case '|': RotateTurtle(turtle, 'U', kPi); break;
 
         case '[':
             stk.push(turtle);
-            turtle.radius *= 0.7071f; // Each branches descreases by a factor of 1/sqrt(2)
+            turtle.radius *= radiusDecay; // Configurable pipe-model radius decay
             break;
         case ']':
             if (!stk.empty())

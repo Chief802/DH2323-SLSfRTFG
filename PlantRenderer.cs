@@ -6,6 +6,16 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 
+[System.Serializable]
+[StructLayout(LayoutKind.Sequential)]
+public struct PlantParams
+{
+    public float baseRadius;
+    public float radiusDecay;
+    public float defaultStep;
+    public float defaultAngleDeg;
+}
+
 /// <summary>
 /// Main component for procedural plant generation and rendering. 
 /// Interfaces with an external C++ library (libPlantSim) to generate L-System nodes, 
@@ -13,10 +23,19 @@ using UnityEngine.Rendering;
 /// </summary>
 public class PlantRenderer : MonoBehaviour
 {
+    [Header("Generation Settings")]
+    [SerializeField]
+    private PlantParams plantSettings = new PlantParams
+    {
+        baseRadius = 0.15f,
+        radiusDecay = 0.7071f,
+        defaultStep = 0.15f,
+        defaultAngleDeg = 25.0f
+    };
+
     /// <summary>
     /// A C-compatible Vector3 struct used for marshalling data to and from the native plugin.
     /// </summary>
-    [StructLayout(LayoutKind.Sequential)]
     public struct Vec3
     {
         public float x, y, z;
@@ -172,7 +191,7 @@ public class PlantRenderer : MonoBehaviour
     }
 
     // Configuration Enums
-    public enum TreeType { CapsellaBursaPastoris , Crocus}
+    public enum TreeType { CapsellaBursaPastoris = 0, StochasticCapsellaBursaPastoris = 1, Crocus = 2 }
     public enum LeafShape { Teardrop, Oval, Compound, Needle, LobedRosette }
     public enum FlowerShape { FivePetal, Daisy, Cup, StarBurst, CrossFourPetal }
 
@@ -180,7 +199,8 @@ public class PlantRenderer : MonoBehaviour
     static readonly Dictionary<TreeType, (LeafShape leaf, FlowerShape flower)> TypeShapes = new()
     {
         [TreeType.CapsellaBursaPastoris] = (LeafShape.LobedRosette, FlowerShape.CrossFourPetal),
-        [TreeType.Crocus] = (LeafShape.Needle, FlowerShape.Cup), 
+        [TreeType.StochasticCapsellaBursaPastoris] = (LeafShape.LobedRosette, FlowerShape.CrossFourPetal),
+        [TreeType.Crocus] = (LeafShape.Needle, FlowerShape.Cup),
     };
 
     /// <summary>Settings to dictate mesh resolution at various camera distances.</summary>
@@ -196,7 +216,7 @@ public class PlantRenderer : MonoBehaviour
     struct NodeAnim { public float StartT, EndT; public bool IsNew; }
 
     [Header("L-System")]
-    public TreeType treeType = TreeType.CapsellaBursaPastoris;
+    public TreeType treeType = TreeType.StochasticCapsellaBursaPastoris;
     public int iterations = 4;
     public uint seed = 67;
 
@@ -281,8 +301,14 @@ public class PlantRenderer : MonoBehaviour
 
     /// <summary>External call to the native C++ library handling the mathematical L-System generation.</summary>
     [DllImport("libPlantSim", CallingConvention = CallingConvention.Cdecl)]
-    static extern int GeneratePlant(int exampleId, int iterations, [Out] PlantNode[] outNodes, int maxNodes, uint seed);
-
+    static extern int GeneratePlant(
+        int exampleId,
+        int iterations,
+        [Out] PlantNode[] outNodes,
+        int maxNodes,
+        uint seed,
+        PlantParams parameters
+    );
     void Awake()
     {
         // Initialize persistent meshes once at startup to avoid instantiation overhead
@@ -333,6 +359,18 @@ public class PlantRenderer : MonoBehaviour
         HandleInput();
         UpdateLod();
         UpdateContinuousMode();
+    }
+
+    /// <summary>
+    /// Live feedback loop: Regenerates plant geometry when values are modified in the Unity Inspector.
+    /// </summary>
+    void OnValidate()
+    {
+        if (Application.isPlaying && _stableBranchMesh != null)
+        {
+            _currentRadialSegs = radialSegments;
+            Generate(animate: false);
+        }
     }
 
     void HandleInput()
@@ -400,15 +438,14 @@ public class PlantRenderer : MonoBehaviour
         }
 
         // 1. Fetch unorganized node data from C++ plugin
-        int count = GeneratePlant((int)treeType, iterations, _nodeBuffer, MAX_NODES, seed);
-        if (count <= 0) return;
+        int count = GeneratePlant((int)treeType, iterations, _nodeBuffer, MAX_NODES, seed, plantSettings); if (count <= 0) return;
         count = Mathf.Min(count, MAX_NODES);
 
         _curBranches.Clear();
         _curLeaves.Clear();
         _curFlowers.Clear();
         _curFruits.Clear();
-
+        
         // 2. Sort nodes by type
         for (int i = 0; i < count; i++)
             switch ((NodeType)_nodeBuffer[i].type)
@@ -793,7 +830,7 @@ public class PlantRenderer : MonoBehaviour
             float size = node.radius * fruitScale * growT;
 
             // Binds fruit to the existing obcordate silique generator
-            EmitHeartPod(pos, fwd, right, faceN, size); 
+            EmitHeartPod(pos, fwd, right, faceN, size);
         }
 
         FlushToMesh(targetMesh);

@@ -8,7 +8,7 @@
 // =============================================================
 // Capsella bursa-pastoris Implementation
 // =============================================================
-static int BuildCapsellaBursaPastoris(int iters, PlantNode *out, int maxNodes, unsigned int seed)
+static int BuildCapsellaBursaPastoris(int iters, PlantNode *out, int maxNodes, unsigned int seed, const PlantParams &params)
 {
     LSystem sys(seed);
 
@@ -132,13 +132,216 @@ static int BuildCapsellaBursaPastoris(int iters, PlantNode *out, int maxNodes, u
     Sentence result = sys.Generate(axiom, iters);
 
     std::cout << "[CapsellaBursaPastoris] iter=" << iters << " nodes=" << result.size() << "\n";
-    return InterpretFull(result, 0.15f, 25.0f, out, maxNodes);
+    return InterpretFull(
+        result, 
+        params.defaultStep, 
+        params.defaultAngleDeg, 
+        out, 
+        maxNodes, 
+        params.baseRadius, 
+        params.radiusDecay
+    );
+}
+
+// =============================================================
+// Stochastic Capsella bursa-pastoris Implementation
+// =============================================================
+static int BuildStochasticCapsellaBursaPastoris(int iters, PlantNode *out, int maxNodes, unsigned int seed, const PlantParams &params)
+{
+    LSystem sys(seed);
+
+    // ---------------------------------------------------------
+    // 1. Vegetative Apex (a)
+    // ---------------------------------------------------------
+    // 70% chance: Standard basal rosette leaf generation
+    sys.AddRule(ProductionRule{
+        'a', 0.70f,
+        [](const std::vector<float> &p) { return !p.empty() && p[0] > 0; },
+        [](const std::vector<float> &p) {
+            float t = p[0];
+            return Sentence{
+                Symbol('['), Symbol('&', {70.0f}), Symbol('L'), Symbol(']'),
+                Symbol('/', {137.5f}),
+                Symbol('I', {10.0f}),
+                Symbol('a', {t - 1.0f})
+            };
+        }
+    });
+
+    // 30% chance: Irregular spacing and divergence angle
+    sys.AddRule(ProductionRule{
+        'a', 0.30f,
+        [](const std::vector<float> &p) { return !p.empty() && p[0] > 0; },
+        [](const std::vector<float> &p) {
+            float t = p[0];
+            return Sentence{
+                Symbol('['), Symbol('&', {60.0f}), Symbol('L'), Symbol(']'),
+                Symbol('/', {145.0f}), // Altered divergence
+                Symbol('I', {8.0f}),   // Shorter main branch internode
+                Symbol('a', {t - 1.0f})
+            };
+        }
+    });
+
+    // Transition to floral apex (Deterministic)
+    sys.AddRule(ProductionRule{
+        'a', 1.0f,
+        [](const std::vector<float> &p) { return p.empty() || p[0] <= 0; },
+        [](const std::vector<float> &) {
+            return Sentence{
+                Symbol('['), Symbol('&', {70.0f}), Symbol('L'), Symbol(']'),
+                Symbol('/', {137.5f}),
+                Symbol('I', {10.0f}),
+                Symbol('A')
+            };
+        }
+    });
+
+    // ---------------------------------------------------------
+    // 2. Floral Apex (A) - Raceme Inflorescence
+    // ---------------------------------------------------------
+    // 60% chance: Standard 4-petal flower with normal branch spacing
+    sys.AddRule(ProductionRule{
+        'A', 0.60f, nullptr,
+        [](const std::vector<float> &) {
+            return Sentence{
+                Symbol('['),
+                    Symbol('&', {18.0f}),
+                    Symbol('u', {4.0f}),
+                    Symbol('F', {0.1f}), Symbol('F', {0.1f}),
+                    Symbol('I', {10.0f}), Symbol('I', {5.0f}),
+                    Symbol('X', {5.0f}),
+                    Symbol('K'), Symbol('K'), Symbol('K'), Symbol('K'),
+                Symbol(']'),
+                Symbol('/', {137.5f}),
+                Symbol('I', {8.0f}),
+                Symbol('A')
+            };
+        }
+    });
+
+    // 20% chance: 3-petal mutation, stunted pedicel, tight spacing
+    sys.AddRule(ProductionRule{
+        'A', 0.20f, nullptr,
+        [](const std::vector<float> &) {
+            return Sentence{
+                Symbol('['),
+                    Symbol('&', {22.0f}),
+                    Symbol('u', {3.0f}),
+                    Symbol('F', {0.1f}), Symbol('F', {0.05f}),
+                    Symbol('I', {8.0f}), Symbol('I', {4.0f}),
+                    Symbol('X', {4.0f}),
+                    Symbol('K'), Symbol('K'), Symbol('K'),
+                Symbol(']'),
+                Symbol('/', {120.0f}), 
+                Symbol('I', {6.0f}),  // Tighter offshoot generation
+                Symbol('A')
+            };
+        }
+    });
+
+    // 20% chance: 5-petal mutation, heavy fruit pod, wide spacing
+    sys.AddRule(ProductionRule{
+        'A', 0.20f, nullptr,
+        [](const std::vector<float> &) {
+            return Sentence{
+                Symbol('['),
+                    Symbol('&', {15.0f}),
+                    Symbol('u', {5.0f}),
+                    Symbol('F', {0.12f}), Symbol('F', {0.12f}),
+                    Symbol('I', {12.0f}), Symbol('I', {6.0f}),
+                    Symbol('X', {6.0f}),
+                    Symbol('K'), Symbol('K'), Symbol('K'), Symbol('K'), Symbol('K'),
+                Symbol(']'),
+                Symbol('/', {150.0f}),
+                Symbol('I', {10.0f}), // Wider offshoot generation
+                Symbol('A')
+            };
+        }
+    });
+
+    // ---------------------------------------------------------
+    // 3. Stem Internode Elongation (I)
+    // ---------------------------------------------------------
+    // 80% chance for standard elongation, 20% chance for stunted growth
+    sys.AddRule(ProductionRule{
+        'I', 0.80f,
+        [](const std::vector<float> &p) { return !p.empty() && p[0] > 0; },
+        [](const std::vector<float> &p) { return Sentence{ Symbol('F', {0.15f}), Symbol('I', {p[0] - 1.0f}) }; }
+    });
+    sys.AddRule(ProductionRule{
+        'I', 0.20f,
+        [](const std::vector<float> &p) { return !p.empty() && p[0] > 0; },
+        [](const std::vector<float> &p) { return Sentence{ Symbol('F', {0.10f}), Symbol('I', {p[0] - 1.0f}) }; }
+    });
+
+    sys.AddRule(ProductionRule{
+        'I', 0.80f,
+        [](const std::vector<float> &p) { return p.empty() || p[0] <= 0; },
+        [](const std::vector<float> &) { return Sentence{ Symbol('F', {0.15f}) }; }
+    });
+    sys.AddRule(ProductionRule{
+        'I', 0.20f,
+        [](const std::vector<float> &p) { return p.empty() || p[0] <= 0; },
+        [](const std::vector<float> &) { return Sentence{ Symbol('F', {0.10f}) }; }
+    });
+
+    // ---------------------------------------------------------
+    // 4. Deterministic Terminals (Pedicels, Leaves, Petals, Fruit)
+    // ---------------------------------------------------------
+    sys.AddRule(ProductionRule{
+        'u', 1.0f,
+        [](const std::vector<float> &p) { return !p.empty() && p[0] > 0; },
+        [](const std::vector<float> &p) { return Sentence{ Symbol('&', {9.0f}), Symbol('u', {p[0] - 1.0f}) }; }
+    });
+    sys.AddRule(ProductionRule{
+        'u', 1.0f,
+        [](const std::vector<float> &p) { return p.empty() || p[0] <= 0; },
+        [](const std::vector<float> &) { return Sentence{ Symbol('&', {9.0f}) }; }
+    });
+
+    sys.AddRule('L', [](const std::vector<float> &) {
+        return Sentence{ Symbol('~', {0.5f}) };
+    });
+
+    sys.AddRule('K', [](const std::vector<float> &) {
+        return Sentence{ Symbol('@', {0.12f}), Symbol('/', {90.0f}) };
+    });
+
+    sys.AddRule(ProductionRule{
+        'X', 1.0f,
+        [](const std::vector<float> &p) { return !p.empty() && p[0] > 0; },
+        [](const std::vector<float> &p) { return Sentence{ Symbol('X', {p[0] - 1.0f}) }; }
+    });
+    sys.AddRule(ProductionRule{
+        'X', 1.0f,
+        [](const std::vector<float> &p) { return p.empty() || p[0] <= 0; },
+        [](const std::vector<float> &) { return Sentence{ Symbol('x', {0.22f}) }; }
+    });
+
+    // ---------------------------------------------------------
+    // Axiom & Generation
+    // ---------------------------------------------------------
+    Sentence axiom{
+        Symbol('!', {params.baseRadius}),
+        Symbol('I', {9.0f}),
+        Symbol('a', {13.0f})
+    };
+
+    Sentence result = sys.Generate(axiom, iters);
+
+    std::cout << "[CapsellaBursaPastoris/Stochastic Fixed] iter=" << iters
+              << " nodes=" << result.size()
+              << " seed=" << seed << "\n";
+
+    // Rely on base default parameters, falling back to unity struct if absent
+    return InterpretFull(result, params.defaultStep, params.defaultAngleDeg, out, maxNodes, params.baseRadius, params.radiusDecay);
 }
 
 // =============================================================
 // Crocus (Crocus sativus) Implementation
 // =============================================================
-static int BuildCrocus(int iters, PlantNode *out, int maxNodes, unsigned int seed)
+static int BuildCrocus(int iters, PlantNode *out, int maxNodes, unsigned int seed, const PlantParams &params)
 {
     LSystem sys(seed);
 
@@ -211,7 +414,15 @@ static int BuildCrocus(int iters, PlantNode *out, int maxNodes, unsigned int see
 
     Sentence result = sys.Generate(axiom, iters);
     std::cout << "[Crocus] iter=" << iters << " nodes=" << result.size() << "\n";
-    return InterpretFull(result, 1.0f, 25.0f, out, maxNodes);
+    
+    return InterpretFull(
+    result, 
+    params.defaultStep, 
+    params.defaultAngleDeg, 
+    out, 
+    maxNodes, 
+    params.baseRadius, 
+    params.radiusDecay);
 }
 
 // =============================================================
@@ -222,12 +433,14 @@ extern "C"
 
     PLANTSIM_API int GeneratePlant(
         int exampleId, int iterations,
-        PlantNode *outNodes, int maxNodes, unsigned int seed)
+        PlantNode *outNodes, int maxNodes, unsigned int seed,
+        PlantParams params)
     {
         switch (exampleId)
         {
-        case 0: return BuildCapsellaBursaPastoris(iterations, outNodes, maxNodes, seed);
-        case 1: return BuildCrocus(iterations, outNodes, maxNodes, seed);
+        case 0: return BuildCapsellaBursaPastoris(iterations, outNodes, maxNodes, seed, params);
+        case 1: return BuildStochasticCapsellaBursaPastoris(iterations, outNodes, maxNodes, seed, params);
+        case 2: return BuildCrocus(iterations, outNodes, maxNodes, seed, params);
         default:
             std::cerr << "[GeneratePlant] Unknown exampleId: " << exampleId << "\n";
             return 0;

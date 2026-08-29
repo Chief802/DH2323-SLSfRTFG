@@ -1,10 +1,5 @@
 // =============================================================
 //  GenerateFlora3D.h  –  Public C API
-//
-//  Single exported entry point: GeneratePlant().
-//  Returns a flat array of PlantNode values that the caller
-//  (e.g. the Unity bridge) can partition by NodeType and build
-//  separate meshes for branches, leaves, and flowers.
 // =============================================================
 #pragma once
 
@@ -23,12 +18,23 @@
 extern "C" {
 
 /**
- *
- * @param exampleId   0–3 (see above)
+ * Plant generation parameters passed directly from Unity.
+ */
+struct PlantParams
+{
+    float baseRadius;       // Base radius/width of main trunk
+    float radiusDecay;      // Scaling factor applied to radius at branches
+    float defaultStep;      // Default length per segment
+    float defaultAngleDeg;  // Default branching angle in degrees
+};
+
+/**
+ * @param exampleId   0 = Capsella, 1 = Stochastic Capsella, 2 = Crocus
  * @param iterations  Number of L-System derivation steps
  * @param outNodes    Caller-allocated output buffer
  * @param maxNodes    Capacity of outNodes
- * @param seed        RNG seed (affects stochastic examples; ignored for example 0)
+ * @param seed        RNG seed
+ * @param params      Configurable structural parameters
  * @return            Number of PlantNode values written, or 0 on error.
  */
 PLANTSIM_API int GeneratePlant(
@@ -36,7 +42,8 @@ PLANTSIM_API int GeneratePlant(
     int          iterations,
     PlantNode*   outNodes,
     int          maxNodes,
-    unsigned int seed
+    unsigned int seed,
+    PlantParams  params
 );
 
 } // extern "C"

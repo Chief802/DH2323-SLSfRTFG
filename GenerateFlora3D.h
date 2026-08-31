@@ -20,12 +20,18 @@ extern "C" {
 /**
  * Plant generation parameters passed directly from Unity.
  */
-struct PlantParams
-{
+struct PlantParams {
     float baseRadius;       // Base radius/width of main trunk
     float radiusDecay;      // Scaling factor applied to radius at branches
     float defaultStep;      // Default length per segment
     float defaultAngleDeg;  // Default branching angle in degrees
+    
+    // --- ABOP Tree Parameters ---
+    float abop_d1; // Divergence angle 1
+    float abop_d2; // Divergence angle 2
+    float abop_a;  // Branching angle
+    float abop_lr; // Length elongation ratio
+    float abop_vr; // Radius fattening ratio
 };
 
 /**

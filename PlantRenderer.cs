@@ -14,6 +14,11 @@ public struct PlantParams
     public float radiusDecay;
     public float defaultStep;
     public float defaultAngleDeg;
+    public float abop_d1;
+    public float abop_d2;
+    public float abop_a;
+    public float abop_lr;
+    public float abop_vr;
 }
 
 /// <summary>
@@ -25,12 +30,18 @@ public class PlantRenderer : MonoBehaviour
 {
     [Header("Generation Settings")]
     [SerializeField]
-    private PlantParams plantSettings = new PlantParams
+private PlantParams plantSettings = new()
     {
         baseRadius = 0.15f,
         radiusDecay = 0.7071f,
         defaultStep = 0.15f,
-        defaultAngleDeg = 25.0f
+        defaultAngleDeg = 25.0f,
+
+        abop_d1 = 94.74f,
+        abop_d2 = 132.63f,
+        abop_a = 18.95f,
+        abop_lr = 1.109f,
+        abop_vr = 1.732f
     };
 
     /// <summary>
@@ -191,7 +202,7 @@ public class PlantRenderer : MonoBehaviour
     }
 
     // Configuration Enums
-    public enum TreeType { CapsellaBursaPastoris = 0, StochasticCapsellaBursaPastoris = 1, Crocus = 2 }
+    public enum TreeType { CapsellaBursaPastoris = 0, StochasticCapsellaBursaPastoris = 1, Crocus = 2, ABOPTree = 3 }
     public enum LeafShape { Teardrop, Oval, Compound, Needle, LobedRosette }
     public enum FlowerShape { FivePetal, Daisy, Cup, StarBurst, CrossFourPetal }
 
@@ -201,6 +212,7 @@ public class PlantRenderer : MonoBehaviour
         [TreeType.CapsellaBursaPastoris] = (LeafShape.LobedRosette, FlowerShape.CrossFourPetal),
         [TreeType.StochasticCapsellaBursaPastoris] = (LeafShape.LobedRosette, FlowerShape.CrossFourPetal),
         [TreeType.Crocus] = (LeafShape.Needle, FlowerShape.Cup),
+        [TreeType.ABOPTree] = (LeafShape.Compound, FlowerShape.StarBurst)
     };
 
     /// <summary>Settings to dictate mesh resolution at various camera distances.</summary>
@@ -307,7 +319,7 @@ public class PlantRenderer : MonoBehaviour
         [Out] PlantNode[] outNodes,
         int maxNodes,
         uint seed,
-        PlantParams parameters
+        ref PlantParams parameters // Pass by reference
     );
     void Awake()
     {
@@ -438,14 +450,13 @@ public class PlantRenderer : MonoBehaviour
         }
 
         // 1. Fetch unorganized node data from C++ plugin
-        int count = GeneratePlant((int)treeType, iterations, _nodeBuffer, MAX_NODES, seed, plantSettings); if (count <= 0) return;
-        count = Mathf.Min(count, MAX_NODES);
+        int count = GeneratePlant((int)treeType, iterations, _nodeBuffer, MAX_NODES, seed, ref plantSettings); // Use ref        count = Mathf.Min(count, MAX_NODES);
 
         _curBranches.Clear();
         _curLeaves.Clear();
         _curFlowers.Clear();
         _curFruits.Clear();
-        
+
         // 2. Sort nodes by type
         for (int i = 0; i < count; i++)
             switch ((NodeType)_nodeBuffer[i].type)

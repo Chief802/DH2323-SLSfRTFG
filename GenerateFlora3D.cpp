@@ -520,6 +520,107 @@ static int BuildABOPTree(int iters, PlantNode *out, int maxNodes, unsigned int s
 }
 
 // =============================================================
+//  Campanula rapunculoides (creeping bellflower) Implementation
+// =============================================================
+// Direct transcription of the dL-system in the supplied figure:
+//
+//   initial string: F_a(x0,n0)
+//
+//   F_a(x,n):
+//     x < x_th              -> developmental growth, dx/dt = v, dn/dt = 0
+//     x = x_th, n > 0       -> F_i(kx) [ +(alpha0) @ K ] F_a((1-k)x,n-1)
+//     x = x_th, n = 0       -> F_i(x) @ K
+//
+// The continuous ODEs are discretized by one developmental increment per
+// L-system derivation step.  F_i(x) is represented by the existing F(x)
+// turtle command.  The existing engine reserves '@' as a flower primitive,
+// so a small C terminal is used for the leaf part of the illustrated @K
+// foliage pair; K remains the flower terminal.
+static int BuildCampanulaRapunculoides(
+    int iters, PlantNode *out, int maxNodes, unsigned int seed, const PlantParams &params)
+{
+    LSystem sys(seed);
+
+    // The figure gives the symbolic parameters but not numerical values.
+    // These are exposed here as model defaults rather than changing the
+    // public PlantParams ABI.
+    constexpr float x0 = 0.20f;       // initial developmental length
+    constexpr float xth = 1.00f;      // threshold at which a node is produced
+    constexpr float v = 0.40f;        // dx per L-system step (Euler discretization)
+    constexpr float n0 = 6.0f;       // number of remaining lateral units
+    constexpr float k = 0.50f;        // fraction allocated to current internode
+    constexpr float alpha0 = 35.0f;  // lateral divergence angle, degrees
+
+    // F_a(x,n), x = x_th and n > 0:
+    sys.AddRule(ProductionRule{
+        'a', 1.0f,
+        [xth](const std::vector<float> &p) {
+            return p.size() >= 2 && p[0] >= xth && p[1] > 0.0f;
+        },
+        [k, alpha0](const std::vector<float> &p) {
+            const float x = p[0];
+            const float n = p[1];
+
+            return Sentence{
+                Symbol('F', {k * x}),
+                Symbol('['),
+                    Symbol('+', {alpha0}),
+                    Symbol('L', {0.65f}), // Replaced 'C' with 'L' to emit Leaf nodes
+                    Symbol('K', {0.0f}),  // Flower terminal
+                Symbol(']'),
+                Symbol('a', {(1.0f - k) * x, n - 1.0f})
+            };
+        }
+    });
+
+    // F_a(x,n), x = x_th and n = 0:
+    sys.AddRule(ProductionRule{
+        'a', 1.0f,
+        [xth](const std::vector<float> &p) {
+            return p.size() >= 2 && p[0] >= xth && p[1] <= 0.0f;
+        },
+        [](const std::vector<float> &p) {
+            const float x = p[0];
+            return Sentence{
+                Symbol('F', {x}),
+                Symbol('L', {0.65f}), // Replaced 'C' with 'L'
+                Symbol('K', {0.0f})
+            };
+        }
+    });
+
+    // F_a(x,n), x < x_th -> developmental growth, dx/dt = v
+    sys.AddRule(ProductionRule{
+        'a', 1.0f,
+        [xth](const std::vector<float> &p) {
+            return !p.empty() && p[0] < xth;
+        },
+        [v](const std::vector<float> &p) {
+            float x = p[0];
+            float n = (p.size() >= 2) ? p[1] : 0.0f;
+            return Sentence{ Symbol('a', {x + v, n}) };
+        }
+    });
+
+    Sentence axiom{ Symbol('a', {x0, n0}) };
+
+    Sentence result = sys.Generate(axiom, iters);
+
+    std::cout << "[CampanulaRapunculoides] iter=" << iters
+              << " nodes=" << result.size()
+              << " seed=" << seed << "\n";
+
+    return InterpretFull(
+        result,
+        params.defaultStep,
+        params.defaultAngleDeg,
+        out,
+        maxNodes,
+        params.baseRadius,
+        params.radiusDecay);
+}
+
+// =============================================================
 //  Exported C API
 // =============================================================
 extern "C"
@@ -540,6 +641,8 @@ extern "C"
             return BuildCrocus(iterations, outNodes, maxNodes, seed, params);
         case 3:
             return BuildABOPTree(iterations, outNodes, maxNodes, seed, params);
+        case 4:
+            return BuildCampanulaRapunculoides(iterations, outNodes, maxNodes, seed, params);
         default:
             std::cerr << "[GeneratePlant] Unknown exampleId: " << exampleId << "\n";
             return 0;

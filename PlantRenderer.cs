@@ -202,9 +202,9 @@ private PlantParams plantSettings = new()
     }
 
     // Configuration Enums
-    public enum TreeType { CapsellaBursaPastoris = 0, StochasticCapsellaBursaPastoris = 1, Crocus = 2, ABOPTree = 3 }
-    public enum LeafShape { Teardrop, Oval, Compound, Needle, LobedRosette }
-    public enum FlowerShape { FivePetal, Daisy, Cup, StarBurst, CrossFourPetal }
+    public enum TreeType { CapsellaBursaPastoris = 0, StochasticCapsellaBursaPastoris = 1, Crocus = 2, ABOPTree = 3, CampanulaRapunculoides = 4 }
+    public enum LeafShape { Teardrop, Oval, Compound, Needle, LobedRosette, Cordate }
+    public enum FlowerShape { FivePetal, Daisy, Cup, StarBurst, CrossFourPetal, Bell }
 
     // Maps TreeType profiles to specific leaf and flower shapes
     static readonly Dictionary<TreeType, (LeafShape leaf, FlowerShape flower)> TypeShapes = new()
@@ -212,8 +212,8 @@ private PlantParams plantSettings = new()
         [TreeType.CapsellaBursaPastoris] = (LeafShape.LobedRosette, FlowerShape.CrossFourPetal),
         [TreeType.StochasticCapsellaBursaPastoris] = (LeafShape.LobedRosette, FlowerShape.CrossFourPetal),
         [TreeType.Crocus] = (LeafShape.Needle, FlowerShape.Cup),
-        [TreeType.ABOPTree] = (LeafShape.Compound, FlowerShape.StarBurst)
-    };
+        [TreeType.ABOPTree] = (LeafShape.Compound, FlowerShape.StarBurst),
+        [TreeType.CampanulaRapunculoides] = (LeafShape.Cordate, FlowerShape.Bell), };
 
     /// <summary>Settings to dictate mesh resolution at various camera distances.</summary>
     [Serializable]
@@ -777,6 +777,7 @@ private PlantParams plantSettings = new()
                 case LeafShape.Compound: EmitCompound(pos, fwd, right, faceN, size); break;
                 case LeafShape.Needle: EmitNeedle(pos, fwd, right, faceN, size); break;
                 case LeafShape.LobedRosette: EmitLobedRosette(pos, fwd, right, faceN, size); break;
+                case LeafShape.Cordate: EmitCordate(pos, fwd, right, faceN, size); break;
             }
         }
 
@@ -812,6 +813,7 @@ private PlantParams plantSettings = new()
                 case FlowerShape.Cup: EmitCup(center, axis, right, up2, size); break;
                 case FlowerShape.StarBurst: EmitStar(center, axis, right, up2, size); break;
                 case FlowerShape.CrossFourPetal: EmitCrossFourPetal(center, axis, right, up2, size); break;
+                case FlowerShape.Bell: EmitBell(center, axis, right, up2, size); break;
             }
         }
 
@@ -1117,6 +1119,69 @@ private PlantParams plantSettings = new()
         }
     }
 
+    /// <summary>Generates cordate/ovate leaves typical of creeping bellflower.</summary>
+    void EmitCordate(Vector3 pos, Vector3 fwd, Vector3 right, Vector3 n, float size)
+    {
+        float h = size * 1.2f;
+        float w = size * 0.75f;
+        Vector3 pBase = pos;
+        Vector3 pMidL = pos + fwd * (h * 0.35f) - right * (w * 0.5f);
+        Vector3 pMidR = pos + fwd * (h * 0.35f) + right * (w * 0.5f);
+        Vector3 pTip  = pos + fwd * h;
+
+        EmitDoubleSidedQuad(pBase, pMidR, pTip, pMidL, n);
+    }
+
+    /// <summary>Generates 5-lobed campanulate (flared bell-shaped) flower geometry.</summary>
+    void EmitBell(Vector3 center, Vector3 axis, Vector3 right, Vector3 up2, float size)
+    {
+        int lobes = 5;
+        int rings = 4;
+        float bellLength = size * 1.1f;
+        float baseRadius = size * 0.12f;
+        float rimRadius  = size * 0.55f;
+
+        int vBase = _verts.Count;
+        for (int r = 0; r <= rings; r++)
+        {
+            float t = (float)r / rings;
+            float rad = Mathf.Lerp(baseRadius, rimRadius, Mathf.Pow(t, 1.8f)); // Flared profile
+            float dist = t * bellLength;
+
+            for (int i = 0; i < lobes; i++)
+            {
+                float angle = i / (float)lobes * Mathf.PI * 2f;
+                float lobeOffset = (r == rings) ? Mathf.Sin(angle * lobes) * 0.08f * size : 0f;
+                Vector3 dir = (Mathf.Cos(angle) * right + Mathf.Sin(angle) * up2).normalized;
+                Vector3 pos = center + axis * dist + dir * (rad + lobeOffset);
+                Vector3 norm = (dir + axis * 0.3f).normalized;
+
+                _verts.Add(pos);
+                _norms.Add(norm);
+                _uvs.Add(new Vector2((float)i / lobes, t));
+            }
+        }
+
+        for (int r = 0; r < rings; r++)
+        {
+            for (int i = 0; i < lobes; i++)
+            {
+                int nextI = (i + 1) % lobes;
+                int i0 = vBase + r * lobes + i;
+                int i1 = vBase + r * lobes + nextI;
+                int i2 = vBase + (r + 1) * lobes + i;
+                int i3 = vBase + (r + 1) * lobes + nextI;
+
+                // Outer surface
+                _tris.Add(i0); _tris.Add(i2); _tris.Add(i1);
+                _tris.Add(i1); _tris.Add(i2); _tris.Add(i3);
+                // Inner surface (double-sided bell interior)
+                _tris.Add(i0); _tris.Add(i1); _tris.Add(i2);
+                _tris.Add(i1); _tris.Add(i3); _tris.Add(i2);
+            }
+        }
+    }
+    
     /// <summary>Commits the populated geometry lists to the actual Unity Mesh object.</summary>
     void FlushToMesh(Mesh mesh)
     {

@@ -249,7 +249,7 @@ private PlantParams plantSettings = new()
     }
 
     // Configuration Enums
-    public enum TreeType { CapsellaBursaPastoris = 0, StochasticCapsellaBursaPastoris = 1, ABOPTree = 2, MycelisMuralis = 3, StochasticMycelisMuralis3D = 4 }
+    public enum TreeType { CapsellaBursaPastoris = 0, StochasticCapsellaBursaPastoris = 1, ABOPTree = 2, MycelisMuralis = 3, StochasticMycelisMuralis3D = 4, DHTwentyTreeTwentyTree = 5 }
     public enum LeafShape { Teardrop, Oval, Compound, Needle, LobedRosette, Cordate, Lyrate }
     public enum FlowerShape { FivePetal, Daisy, Cup, StarBurst, CrossFourPetal, Bell, FiveRayHead }
 
@@ -260,7 +260,8 @@ private PlantParams plantSettings = new()
         [TreeType.StochasticCapsellaBursaPastoris] = (LeafShape.LobedRosette, FlowerShape.CrossFourPetal),
         [TreeType.ABOPTree] = (LeafShape.Compound, FlowerShape.StarBurst),
         [TreeType.MycelisMuralis] = (LeafShape.Lyrate, FlowerShape.FiveRayHead),
-        [TreeType.StochasticMycelisMuralis3D] = (LeafShape.Lyrate, FlowerShape.FiveRayHead)
+        [TreeType.StochasticMycelisMuralis3D] = (LeafShape.Lyrate, FlowerShape.FiveRayHead),
+        [TreeType.DHTwentyTreeTwentyTree] = (LeafShape.Compound, FlowerShape.FivePetal) 
         };
     
     /// <summary>Settings to dictate mesh resolution at various camera distances.</summary>
@@ -312,6 +313,9 @@ private PlantParams plantSettings = new()
         new LodSettings { maxDistance = 999f, branchRadialSegments = 3, leafDetail = 4 },
     };
     public float lodCheckInterval = 0.3f;
+
+    [Header("Super Secret Setting")]
+    public string vineText = "D-H-2-3-2-3";
 
     [Header("Growth Animation")]
     public float growthDuration = 1.6f;
@@ -377,7 +381,8 @@ Mesh _stableBranchMesh, _growingBranchMesh;
         [Out] PlantNode[] outNodes,
         int maxNodes,
         uint seed,
-        ref PlantParams parameters // Pass by reference
+        ref PlantParams parameters, // Pass by reference
+        [MarshalAs(UnmanagedType.LPStr)] string customText
     );
     void Awake()
     {
@@ -515,7 +520,7 @@ Mesh _stableBranchMesh, _growingBranchMesh;
         }
 
         // 1. Fetch unorganized node data from C++ plugin
-        int count = GeneratePlant((int)treeType, iterations, _nodeBuffer, MAX_NODES, seed, ref plantSettings); // Use ref        count = Mathf.Min(count, MAX_NODES);
+        int count = GeneratePlant((int)treeType, iterations, _nodeBuffer, MAX_NODES, seed, ref plantSettings, vineText); // Use ref        count = Mathf.Min(count, MAX_NODES);
 
         _curBranches.Clear();
         _curLeaves.Clear();

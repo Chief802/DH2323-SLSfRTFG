@@ -116,6 +116,13 @@ public class PlantRendererEditor : Editor
                 DrawParam("divergenceAngle2", "Max Roll Angle");
                 DrawParam("leafSize");
                 break;
+
+            case PlantRenderer.TreeType.DHTwentyTreeTwentyTree:
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("vineText"), new GUIContent("Vine Text Input"));
+                DrawParam("branchAngle1", "Flower Branch Pitch Angle");
+                DrawParam("leafSize");
+                DrawParam("flowerSize");
+                break;
         }
 
         EditorGUILayout.Space();

@@ -67,7 +67,8 @@ PLANTSIM_API int GeneratePlant(
     PlantNode*   outNodes,
     int          maxNodes,
     unsigned int seed,
-    PlantParams  params
+    PlantParams  params,
+    const char*  customText
 );
 
 } // extern "C"

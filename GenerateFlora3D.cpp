@@ -4,6 +4,9 @@
 #define PLANTSIM_EXPORTS
 #include "GenerateFlora3D.h"
 #include <iostream>
+#include <string>
+#include <cctype>
+#include <algorithm>
 
 // =============================================================
 // Capsella bursa-pastoris Implementation
@@ -415,6 +418,113 @@ static int BuildStochasticMycelisMuralis3D(int iters, PlantNode *out, int maxNod
 }
 
 // =============================================================
+// Character Vine Implementation (D, H, 2, 3)
+// =============================================================
+static int BuildDHTwentyTreeTwentyTree(int iters, PlantNode *out, int maxNodes, unsigned int seed, const PlantParams &params, const char* text)
+{
+    LSystem sys(seed);
+
+    // Rule 1: Subdivide the rigid stem into 4 smaller, slightly wobbling segments.
+    // This distributes alternating leaves, flowers, and curly tendrils organically.
+    sys.AddRule('S', [params](const std::vector<float> &p) {
+        float len = p.empty() ? 1.0f : p[0];
+        float seg = len / 4.0f;
+        return Sentence{
+            // Step 1: Slight roll, drop a leaf
+            Symbol('/', {10.0f}), Symbol('F', {seg}),
+            Symbol('['), Symbol('/', {params.divergenceAngle1}), Symbol('&', {params.branchAngle1}), Symbol('~', {params.leafSize}), Symbol(']'),
+            
+            // Step 2: Pitch wobble, spawn a flower branch
+            Symbol('^', {4.0f}), Symbol('F', {seg}),
+            Symbol('['), Symbol('/', {params.divergenceAngle2}), Symbol('&', {params.branchAngle2}), Symbol('K'), Symbol(']'),
+            
+            // Step 3: Roll & pitch correction, grow a curly tendril (T)
+            Symbol('\\', {20.0f}), Symbol('&', {8.0f}), Symbol('F', {seg}),
+            Symbol('['), Symbol('/', {137.5f}), Symbol('&', {params.branchAngle1 * 1.5f}), Symbol('T'), Symbol(']'),
+            
+            // Step 4: Return to center heading, drop an opposite leaf
+            Symbol('/', {10.0f}), Symbol('^', {-4.0f}), Symbol('F', {seg}),
+            Symbol('['), Symbol('/', {-params.divergenceAngle1}), Symbol('&', {params.branchAngle1}), Symbol('~', {params.leafSize}), Symbol(']')
+        };
+    });
+    
+    // Rule 2: A tight, spiraling curve to simulate a grasping vine tendril
+    sys.AddRule('T', [params](const std::vector<float> &) {
+        return Sentence{
+            Symbol('!', {params.baseRadius * 0.4f}), // Thinner radius for tendril
+            Symbol('F', {0.15f}), Symbol('+', {30.f}), Symbol('/', {15.f}),
+            Symbol('F', {0.15f}), Symbol('+', {30.f}), Symbol('/', {15.f}),
+            Symbol('F', {0.15f}), Symbol('+', {30.f}), Symbol('/', {15.f}),
+            Symbol('F', {0.15f}), Symbol('+', {30.f}), Symbol('/', {15.f}),
+            Symbol('F', {0.1f}),  Symbol('+', {30.f})
+        };
+    });
+
+    // Rule 3: Resolve K into a flower with a small supporting pedicel (stem)
+    sys.AddRule('K', [params](const std::vector<float> &) { 
+        return Sentence{
+            Symbol('!', {params.baseRadius * 0.6f}), // Thinner stem for flower
+            Symbol('F', {0.2f}), 
+            Symbol('@', {params.flowerSize}), Symbol('/', {90.0f})
+        }; 
+    });
+
+    Sentence axiom;
+    axiom.push_back(Symbol('!', {params.baseRadius}));
+
+    std::string str = (text && text[0] != '\0') ? text : "2-3";
+
+    for (char c : str)
+    {
+        c = std::toupper(static_cast<unsigned char>(c));
+        
+        // Push turtle state so every character safely starts at local (0,0) facing UP
+        axiom.push_back(Symbol('['));
+
+        if (c == 'D') {
+            axiom.insert(axiom.end(), {
+                Symbol('S', {2.0f}), Symbol('-', {90.f}), Symbol('S', {0.5f}), Symbol('-', {45.f}),
+                Symbol('S', {0.707f}), Symbol('-', {45.f}), Symbol('S', {1.0f}), Symbol('-', {45.f}),
+                Symbol('S', {0.707f}), Symbol('-', {45.f}), Symbol('S', {0.5f})
+            });
+        } else if (c == 'H') {
+            axiom.insert(axiom.end(), {
+                Symbol('S', {2.0f}), Symbol('f', {-1.0f}), Symbol('-', {90.f}), Symbol('S', {1.0f}),
+                Symbol('+', {90.f}), Symbol('f', {-1.0f}), Symbol('S', {2.0f})
+            });
+        } else if (c == '2') {
+            axiom.insert(axiom.end(), {
+                Symbol('f', {2.0f}), Symbol('-', {90.f}), Symbol('S', {1.0f}), Symbol('-', {90.f}),
+                Symbol('S', {1.0f}), Symbol('-', {90.f}), Symbol('S', {1.0f}), Symbol('+', {90.f}),
+                Symbol('S', {1.0f}), Symbol('+', {90.f}), Symbol('S', {1.0f})
+            });
+        } else if (c == '3') {
+            axiom.insert(axiom.end(), {
+                Symbol('f', {2.0f}), Symbol('-', {90.f}), Symbol('S', {1.0f}), Symbol('-', {90.f}),
+                Symbol('S', {1.0f}), Symbol('-', {90.f}), Symbol('S', {1.0f}), Symbol('f', {-1.0f}),
+                Symbol('+', {90.f}), Symbol('S', {1.0f}), Symbol('-', {90.f}), Symbol('S', {1.0f})
+            });
+        } else if (c == '-') {
+            axiom.insert(axiom.end(), {
+                Symbol('f', {1.0f}), Symbol('-', {90.f}), Symbol('S', {1.0f})
+            });
+        }
+
+        // Pop state, returning to the bottom-left start of this character space
+        axiom.push_back(Symbol(']'));
+
+        // Translate 1.5 units to the right to set up the origin for the next character
+        axiom.insert(axiom.end(), {
+            Symbol('-', {90.f}), Symbol('f', {1.5f}), Symbol('+', {90.f})
+        });
+    }
+
+    // Apply rules to convert 'S' macros into final geometry
+    Sentence result = sys.Generate(axiom, std::max(1, iters));
+    return InterpretFull(result, params.defaultStep, params.defaultAngleDeg, out, maxNodes, params.baseRadius, params.radiusDecay);
+}
+
+// =============================================================
 //  Exported C API
 // =============================================================
 extern "C"
@@ -422,7 +532,7 @@ extern "C"
     PLANTSIM_API int GeneratePlant(
         int exampleId, int iterations,
         PlantNode *outNodes, int maxNodes, unsigned int seed,
-        PlantParams params)
+        PlantParams params, const char* customText)
     {
         switch (exampleId)
         {
@@ -436,6 +546,8 @@ extern "C"
             return BuildMycelisMuralis(iterations, outNodes, maxNodes, seed, params);
         case 4:
             return BuildStochasticMycelisMuralis3D(iterations, outNodes, maxNodes, seed, params);
+        case 5: 
+        return BuildDHTwentyTreeTwentyTree(iterations, outNodes, maxNodes, seed, params, customText);
 
         default:
             std::cerr << "[GeneratePlant] Unknown exampleId: " << exampleId << "\n";

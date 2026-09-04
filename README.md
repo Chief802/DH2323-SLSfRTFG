@@ -33,249 +33,26 @@ The floral axioms and L-System parser is implemented in C++, whereas the Unity b
 A .dll file needs to be built in order to run the program. No additional packages or third-party APIs were used in Unity. 
 
 
-## Some Update Highlights
-### 2026 April 12 \- Project Start  
-The feedback to the first project specification draft was returned, allowing goals beyond the implementation aspect to be set.
-The focus was consequently set on evaluating the algorithm and its implementation. This was investigated from the following perspectives
-- Speed, in terms of how quickly flora could be generated
-- Memory, in terms of how expensive a floral instance is
-- Realism, in terms of how well the structure of real flora is captured by the L-System  
+### 2026 September 4 \- Final
 
-These aspects were then taken from the individual level of one plant, to investigating how scaling to many more floral instances affects them.
+Various new plants have been implemented, including Mycelis Muralis, a Ternary Sympodial Tree reintroduced from a previous version, and a stochastic version of both Capsella bursa-pastoris and Mycelis muralis. The codebase has been reworked such that it is easier to expand upon in the future, in addition to being easier to read. The final part of the project is to add the video demo and upload the final version.
 
-### 2026 April 14 \- The first plant  
-Before an evaluation can take place, there needs to be something to evaluate. The current short-term goal for the project was at this point to implement both a basic, 
-2-Dimenstional plant, and to be able to have it be shown in Unity (with the use of LineRenderer). This first instance, and its growth stages, can be shown below.
+### 2026 August 28 \- Plants from Literature
 
-![First version in 2D](Assets/PlantSim2DV01.gif)
+Some old plants have been removed and new ones added directly from previous literature. This is the Capsella bursa-pastoris flower and the Crocus. The first one has additional complexity that makes it interesting to generate. A version of it differing from the literature, with stochastic elements, is to be added as well.
 
-### INTERMISSION - How does a basic L-System work?
-What Prusinkiewicz et al and related works fundamentally argue, is that the way plants grow is neither unpredictable or inimitable, but rather in accordance to 
-algorithms of various complexities that we ourselves can imitate.
 
-When building an L-System, we apply certain rules to certain symbols, imagined as a turtle moving around (by convention).
-- F means go forward one segment
-- \+ mean turn left a certain amount of degrees degrees
-- [ means to start a new branch
-- etc.
+### 2026 August 5 \- Evaluation and Final Floral Instances
 
-This plant above follows a very simply rule:  `F :- F[+F]F[-F]F`  
-This tells us that *for every segment F, go forward; start a new branch, turn left, and go forward; go forward; start a new branch, turn right, and go forward; and finally go forward again*. By writing more and more sophisticated rules, we can create more and more sophisticated plants.  
+After a break during the summer, a recap is due for the final parts of the project. To begin with, the aim is to implement supervisor feedback to finalize the coding aspects of the project. Then, a written report is to be created in addition to taking the project specification to its last iteration. Creating a short demo where one can play around, in addition to a video showcasing the program, is something we want to do as well.
 
-### 2026 April 20 \- What if we had even more dimensions?  
-Although there is value in having a 2D implementation (which I shall expand upon in the "future work" section whenever that is written), the goal was always to expand to 3D. This meant that two things needed to be changed:
-- The way the turtle moves
-- The way the plant is rendered  
+A summary of the most recent feedback received is as follows:
 
-The TurtleState struct now has a 3D position and three vectors U (Up), L (Left), and H (Heading) for direction.
-These allow us to implement  pitch, yaw, and roll for the turtle.
+* The project is looking "very good" for an A! (That's the goal!)
+* We could tap into evaluation. This would entail giving specifics for (1) evaluation challenges and (2) methods that could be used, with references included of course. 
+* We could focus on evaluating a specific plant instead: "beyond that, [...] simulat(ing) the growth of a very specific plant type". For this purpose we would find a relevant plant with previous literature in its investigation to base the final version of the project off of.
 
-```
-inline void RotateTurtle(TurtleState &t, char axis, float alpha)
-    {
-        const float ca = std::cos(alpha), sa = std::sin(alpha);
-        const Vec3 oH = t.H, oU = t.U, oL = t.L;
-        switch (axis)
-        {
-        case 'U':
-            t.H = {oH.x * ca + oL.x * sa, oH.y * ca + oL.y * sa, oH.z * ca + oL.z * sa};
-            t.L = {-oH.x * sa + oL.x * ca, -oH.y * sa + oL.y * ca, -oH.z * sa + oL.z * ca};
-            break;
-        case 'L':
-            t.H = {oH.x * ca - oU.x * sa, oH.y * ca - oU.y * sa, oH.z * ca - oU.z * sa};
-            t.U = {oH.x * sa + oU.x * ca, oH.y * sa + oU.y * ca, oH.z * sa + oU.z * ca};
-            break;
-        case 'H':
-            t.L = {oL.x * ca - oU.x * sa, oL.y * ca - oU.y * sa, oL.z * ca - oU.z * sa};
-            t.U = {oL.x * sa + oU.x * ca, oL.y * sa + oU.y * ca, oL.z * sa + oU.z * ca};
-            break;
-        default:
-            break;
-        }
-    }
-```
-
-This first 3D implemented cylinders to connect points for simplicitity, but was later to be changed to something that had more of a justification for its implementation. 
-Nevertheless, the implementation looked like the following:
-```
-void BuildBranchMesh(Segment[] segments, int count)
-    {
-        if (Keyboard.current.spaceKey.wasPressedThisFrame)
-        List<Vector3> vertices = new List<Vector3>();
-        List<int> triangles = new List<int>();
-        List<Vector3> normals = new List<Vector3>();
-
-        for (int i = 0; i < count; i++)
-        {
-            Vector3 a = ToUnityVector(segments[i].a);
-            Vector3 b = ToUnityVector(segments[i].b);
-
-            float radius = segments[i].radius * Mathf.Lerp(1f, 0.25f, i / (float)count);
-
-            AddCylinder(
-                a,
-                b,
-                radius,
-                radialSegments,
-                vertices,
-                triangles,
-                normals
-            );
-        }
-
-        Mesh mesh = new Mesh
-        {
-            indexFormat = UnityEngine.Rendering.IndexFormat.UInt32
-        };
-
-        mesh.SetVertices(vertices);
-        mesh.SetTriangles(triangles, 0);
-        mesh.SetNormals(normals);
-        mesh.RecalculateBounds();
-
-        mf.mesh = mesh;
-    }
-```
-
-An example of a 3-Dimensional plant can be found in the next section.
-
-### 2026 April 29 \- Greater control and refactoring
-In order to simulate more advanced plants, a more advanced L-System was required. This was accomplished by expanding the L-System in two major ways
-- Making it stochastic
-- Making it parametric
-
-A stochastic L-System allows multiple branching paths for one specific rule enabling diversity withing a plant species.  
-An example can be seen below:
-
-```
-static int BuildStochasticShrub(int iters, PlantNode *out, int maxNodes, unsigned int seed)
-{
-    LSystem sys(seed);
-
-    sys.AddRule('A', 0.34f, [](const std::vector<float> &)
-                { return Sentence{{'F'}, {'['}, {'+'}, {'A'}, {'~'}, {']'}, {'F'}, {'['}, {'-'}, {'A'}, {'~'}, {']'}, {'A'}}; });
-    sys.AddRule('A', 0.33f, [](const std::vector<float> &)
-                { return Sentence{{'F'}, {'['}, {'+'}, {'A'}, {'~'}, {']'}, {'A'}}; });
-    sys.AddRule('A', 0.33f, [](const std::vector<float> &)
-                { return Sentence{{'F'}, {'['}, {'-'}, {'A'}, {'~'}, {']'}, {'A'}}; });
-
-    Sentence result = sys.Generate(MakeSentence("A"), iters);
-
-    return InterpretFull(result, 0.3f, 25.0f, out, maxNodes);
-}
-```
-Stochastic L-Systems can additionally be used to set a natural limit for how large a plant can grow, by making it so that end-points, such as flowers,
-become more and more likely to occur as the tree has more iterations. This can then culminate in a 100% chance after a set limit, naturally having the plant stop growing.  
-
-A parametric L-System on the other hand enables different rules to carry parameters. These can be parameters such as length in the case of movement, an angle in the case of turning, or directly setting a branches radius to a value of choice. Previously, every time a rule appeared it had the same value, limiting choice greatly.  
-An example of this can be found from the following implemenation of a tree from *The Algorithmic Beauty of Plants*:
-
-```
-static int BuildABOPTree(int iters, PlantNode* out, int maxNodes, unsigned int seed)
-{
-    constexpr float d1 = 94.74f;
-    constexpr float d2 = 132.63f;
-    constexpr float a  = 18.95f;
-    constexpr float lr = 1.109f;
-    constexpr float vr = 1.732f;
-
-    LSystem sys(seed);
-
-    // p1 – Apex expansion with leaves and a single apical flower
-    sys.AddRule('A', [](const std::vector<float>&) {
-        return Sentence {
-            Symbol('!', {vr}),
-            Symbol('F', {50.f}),
-
-            Symbol('['),
-                Symbol('&', {a}), Symbol('F', {50.f}), Symbol('A'),
-                Symbol('~', {2.0f}),   // leaf near this arm's apex
-            Symbol(']'),
-
-            Symbol('/', {d1}),
-
-            Symbol('['),
-                Symbol('&', {a}), Symbol('F', {50.f}), Symbol('A'),
-                Symbol('~', {2.0f}),
-            Symbol(']'),
-
-            Symbol('/', {d2}),
-
-            Symbol('['),
-                Symbol('&', {a}), Symbol('F', {50.f}), Symbol('A'),
-                Symbol('~', {2.0f}),
-            Symbol(']'),
-
-            Symbol('@', {1.5f}),       // flower at the meristem apex
-        };
-    });
-
-    // p2 – Segment elongation
-    sys.AddRule(ProductionRule{
-        'F', 1.0f, nullptr,
-        [](const std::vector<float>& p) {
-            float l = p.empty() ? 1.f : p[0];
-            return Sentence { Symbol('F', {l * lr}) };
-        }
-    });
-
-    // p3 – Radius fattening (pipe model)
-    sys.AddRule(ProductionRule{
-        '!', 1.0f, nullptr,
-        [](const std::vector<float>& p) {
-            float w = p.empty() ? 1.f : p[0];
-            return Sentence { Symbol('!', {w * vr}) };
-        }
-    });
-
-    Sentence axiom {
-        Symbol('!', {1.f}),
-        Symbol('F', {200.f}),
-        Symbol('/', {45.f}),
-        Symbol('A'),
-    };
-
-    Sentence result = sys.Generate(axiom, iters);
-
-    std::cout << "[ABOPTree]  iter=" << iters
-              << "  seed=" << seed
-              << "  nodes=" << result.size() << "\n";
-
-    return InterpretFull(result, 1.0f, 22.5f, out, maxNodes);
-}
-```
-
-This creates the following tree, at iteration 1 and 5. Note that the performance output shown is of little interest - since nothing is moving - except for the scene output showcasing the number of triangles and vertices.
-![ABOP Tree Iteration 1](Assets/ABOP1.png)
-![ABOP Tree Iteration 5](Assets/ABOP5.png)  
-The next step is to implement animations (a much better stress test) and a nicer way to connect parts of the tree (notice the different cylinders being very visible)  
-
-Lastly, the current rules for the L-System are the following:
-- F(l)   Draw forward, step = l
-- f(l)   Move forward, no geometry
-- ~(s)   Emit a Leaf  at current position, size = s   
-- @(s)   Emit a Flower at current position, size = s
-- !(w)   Set current radius to w
-- \+ \-  Yaw   left / right   
-- & ^    Pitch  down / up
-- \ /    Roll   left / right
-- |      U-turn (180°)
-- \[]   Start/end branch  
-
-Note that all angle options also take in parameters.  
-
-### INTERMISSION - What is Realism?
-During this part of the project, determining the meaning of the generator being "realistic" was also put under consideration, as its evaluation is non-trivial. We are aided by the fact that one of the purposes of L-Systems, as described by the ABOP literature, is to aid in *"The quest for photorealism"*. Consequently one could argue by using the very algorithm itself aids in plants being realistic. However, to help fulfill the goal of having a more accurate meaning of realism, some on-the-ground research was performed to establish a ground truth for realism.  
-
-In other words: I went out and took pictures of trees.
-
-![Cherry Blossom Flowers](Assets/Treesearch/IMG20260427100729.jpg)
-![Cherry Blossom Leaves](Assets/Treesearch/IMG20260427100736.jpg)
-![Cherry Blossom Tree](Assets/Treesearch/IMG20260427101142.jpg)  
-
-[See more pictures here.](https://drive.google.com/drive/folders/11BrrhxrQySDOilO-TjIVJu34_9ztmRNU?usp=sharing)  
-
-The argument for doing this is that a real-life plant, by definition, is realistic. If we have aimed to imitate the structure of a real plant, we have aimed to fulfill the realism aspect of our project. Additionally, ensuring that floral instances are different - by making our L-System stochastic - allows us to generate many instances of the same species of plant while ensuring diversity. This to aids in a forest, garden, or similar "feeling" realistic. Defining realism formally might be an endeavor worth undertaking for the final project report.
+I am preliminarily wary that previous work regarding the efficacy of L-Systems for Real Time use is small in numbers, if there is any at all. In that case, the goal is to instead provide a potential baseline. This could for example be via the aforementioned very specific plant, described in previous work, that has parameters as well as stochastic elements in its creation.
 
 ### 2026 May 1 \- Animation, Structural Improvements and Performance Enhancement
 After extending to three dimensions, in addition to allowing plants of whichever complexity we want, the next step was to shift the project focus to the Real-Time rendering aspect.  
@@ -558,18 +335,250 @@ static Vector3 ParallelTransport(Vector3 n, Vector3 from, Vector3 to)
 }
 ```
 
-### 2026 August 5 \- Evaluation and Final Floral Instances
+### INTERMISSION - What is Realism?
+During this part of the project, determining the meaning of the generator being "realistic" was also put under consideration, as its evaluation is non-trivial. We are aided by the fact that one of the purposes of L-Systems, as described by the ABOP literature, is to aid in *"The quest for photorealism"*. Consequently one could argue by using the very algorithm itself aids in plants being realistic. However, to help fulfill the goal of having a more accurate meaning of realism, some on-the-ground research was performed to establish a ground truth for realism.  
 
-After a break during the summer, a recap is due for the final parts of the project. To begin with, the aim is to implement supervisor feedback to finalize the coding aspects of the project. Then, a written report is to be created in addition to taking the project specification to its last iteration. Creating a short demo where one can play around, in addition to a video showcasing the program, is something we want to do as well.
+In other words: I went out and took pictures of trees.
 
-A summary of the most recent feedback received is as follows:
+![Cherry Blossom Flowers](Assets/Treesearch/IMG20260427100729.jpg)
+![Cherry Blossom Leaves](Assets/Treesearch/IMG20260427100736.jpg)
+![Cherry Blossom Tree](Assets/Treesearch/IMG20260427101142.jpg)  
 
-* The project is looking "very good" for an A! (That's the goal!)
-* We could tap into evaluation. This would entail giving specifics for (1) evaluation challenges and (2) methods that could be used, with references included of course. 
-* We could focus on evaluating a specific plant instead: "beyond that, [...] simulat(ing) the growth of a very specific plant type". For this purpose we would find a relevant plant with previous literature in its investigation to base the final version of the project off of.
+[See more pictures here.](https://drive.google.com/drive/folders/11BrrhxrQySDOilO-TjIVJu34_9ztmRNU?usp=sharing)  
 
-I am preliminarily wary that previous work regarding the efficacy of L-Systems for Real Time use is small in numbers, if there is any at all. In that case, the goal is to instead provide a potential baseline. This could for example be via the aforementioned very specific plant, described in previous work, that has parameters as well as stochastic elements in its creation.
+The argument for doing this is that a real-life plant, by definition, is realistic. If we have aimed to imitate the structure of a real plant, we have aimed to fulfill the realism aspect of our project. Additionally, ensuring that floral instances are different - by making our L-System stochastic - allows us to generate many instances of the same species of plant while ensuring diversity. This to aids in a forest, garden, or similar "feeling" realistic. Defining realism formally might be an endeavor worth undertaking for the final project report.
 
-### 2026 August 28 \- Plants from Literature
 
-Some old plants have been removed and new ones added directly from previous literature. This is the Capsella bursa-pastoris flower and the Crocus. The first one has additional complexity that makes it interesting to generate. A version of it differing from the literature, with stochastic elements, is to be added as well.
+### 2026 April 29 \- Greater control and refactoring
+In order to simulate more advanced plants, a more advanced L-System was required. This was accomplished by expanding the L-System in two major ways
+- Making it stochastic
+- Making it parametric
+
+A stochastic L-System allows multiple branching paths for one specific rule enabling diversity withing a plant species.  
+An example can be seen below:
+
+```
+static int BuildStochasticShrub(int iters, PlantNode *out, int maxNodes, unsigned int seed)
+{
+    LSystem sys(seed);
+
+    sys.AddRule('A', 0.34f, [](const std::vector<float> &)
+                { return Sentence{{'F'}, {'['}, {'+'}, {'A'}, {'~'}, {']'}, {'F'}, {'['}, {'-'}, {'A'}, {'~'}, {']'}, {'A'}}; });
+    sys.AddRule('A', 0.33f, [](const std::vector<float> &)
+                { return Sentence{{'F'}, {'['}, {'+'}, {'A'}, {'~'}, {']'}, {'A'}}; });
+    sys.AddRule('A', 0.33f, [](const std::vector<float> &)
+                { return Sentence{{'F'}, {'['}, {'-'}, {'A'}, {'~'}, {']'}, {'A'}}; });
+
+    Sentence result = sys.Generate(MakeSentence("A"), iters);
+
+    return InterpretFull(result, 0.3f, 25.0f, out, maxNodes);
+}
+```
+Stochastic L-Systems can additionally be used to set a natural limit for how large a plant can grow, by making it so that end-points, such as flowers,
+become more and more likely to occur as the tree has more iterations. This can then culminate in a 100% chance after a set limit, naturally having the plant stop growing.  
+
+A parametric L-System on the other hand enables different rules to carry parameters. These can be parameters such as length in the case of movement, an angle in the case of turning, or directly setting a branches radius to a value of choice. Previously, every time a rule appeared it had the same value, limiting choice greatly.  
+An example of this can be found from the following implemenation of a tree from *The Algorithmic Beauty of Plants*:
+
+```
+static int BuildABOPTree(int iters, PlantNode* out, int maxNodes, unsigned int seed)
+{
+    constexpr float d1 = 94.74f;
+    constexpr float d2 = 132.63f;
+    constexpr float a  = 18.95f;
+    constexpr float lr = 1.109f;
+    constexpr float vr = 1.732f;
+
+    LSystem sys(seed);
+
+    // p1 – Apex expansion with leaves and a single apical flower
+    sys.AddRule('A', [](const std::vector<float>&) {
+        return Sentence {
+            Symbol('!', {vr}),
+            Symbol('F', {50.f}),
+
+            Symbol('['),
+                Symbol('&', {a}), Symbol('F', {50.f}), Symbol('A'),
+                Symbol('~', {2.0f}),   // leaf near this arm's apex
+            Symbol(']'),
+
+            Symbol('/', {d1}),
+
+            Symbol('['),
+                Symbol('&', {a}), Symbol('F', {50.f}), Symbol('A'),
+                Symbol('~', {2.0f}),
+            Symbol(']'),
+
+            Symbol('/', {d2}),
+
+            Symbol('['),
+                Symbol('&', {a}), Symbol('F', {50.f}), Symbol('A'),
+                Symbol('~', {2.0f}),
+            Symbol(']'),
+
+            Symbol('@', {1.5f}),       // flower at the meristem apex
+        };
+    });
+
+    // p2 – Segment elongation
+    sys.AddRule(ProductionRule{
+        'F', 1.0f, nullptr,
+        [](const std::vector<float>& p) {
+            float l = p.empty() ? 1.f : p[0];
+            return Sentence { Symbol('F', {l * lr}) };
+        }
+    });
+
+    // p3 – Radius fattening (pipe model)
+    sys.AddRule(ProductionRule{
+        '!', 1.0f, nullptr,
+        [](const std::vector<float>& p) {
+            float w = p.empty() ? 1.f : p[0];
+            return Sentence { Symbol('!', {w * vr}) };
+        }
+    });
+
+    Sentence axiom {
+        Symbol('!', {1.f}),
+        Symbol('F', {200.f}),
+        Symbol('/', {45.f}),
+        Symbol('A'),
+    };
+
+    Sentence result = sys.Generate(axiom, iters);
+
+    std::cout << "[ABOPTree]  iter=" << iters
+              << "  seed=" << seed
+              << "  nodes=" << result.size() << "\n";
+
+    return InterpretFull(result, 1.0f, 22.5f, out, maxNodes);
+}
+```
+
+This creates the following tree, at iteration 1 and 5. Note that the performance output shown is of little interest - since nothing is moving - except for the scene output showcasing the number of triangles and vertices.
+![ABOP Tree Iteration 1](Assets/ABOP1.png)
+![ABOP Tree Iteration 5](Assets/ABOP5.png)  
+The next step is to implement animations (a much better stress test) and a nicer way to connect parts of the tree (notice the different cylinders being very visible)  
+
+Lastly, the current rules for the L-System are the following:
+- F(l)   Draw forward, step = l
+- f(l)   Move forward, no geometry
+- ~(s)   Emit a Leaf  at current position, size = s   
+- @(s)   Emit a Flower at current position, size = s
+- !(w)   Set current radius to w
+- \+ \-  Yaw   left / right   
+- & ^    Pitch  down / up
+- \ /    Roll   left / right
+- |      U-turn (180°)
+- \[]   Start/end branch  
+
+Note that all angle options also take in parameters.  
+
+
+
+### 2026 April 20 \- What if we had even more dimensions?  
+Although there is value in having a 2D implementation (which I shall expand upon in the "future work" section whenever that is written), the goal was always to expand to 3D. This meant that two things needed to be changed:
+- The way the turtle moves
+- The way the plant is rendered  
+
+The TurtleState struct now has a 3D position and three vectors U (Up), L (Left), and H (Heading) for direction.
+These allow us to implement  pitch, yaw, and roll for the turtle.
+
+```
+inline void RotateTurtle(TurtleState &t, char axis, float alpha)
+    {
+        const float ca = std::cos(alpha), sa = std::sin(alpha);
+        const Vec3 oH = t.H, oU = t.U, oL = t.L;
+        switch (axis)
+        {
+        case 'U':
+            t.H = {oH.x * ca + oL.x * sa, oH.y * ca + oL.y * sa, oH.z * ca + oL.z * sa};
+            t.L = {-oH.x * sa + oL.x * ca, -oH.y * sa + oL.y * ca, -oH.z * sa + oL.z * ca};
+            break;
+        case 'L':
+            t.H = {oH.x * ca - oU.x * sa, oH.y * ca - oU.y * sa, oH.z * ca - oU.z * sa};
+            t.U = {oH.x * sa + oU.x * ca, oH.y * sa + oU.y * ca, oH.z * sa + oU.z * ca};
+            break;
+        case 'H':
+            t.L = {oL.x * ca - oU.x * sa, oL.y * ca - oU.y * sa, oL.z * ca - oU.z * sa};
+            t.U = {oL.x * sa + oU.x * ca, oL.y * sa + oU.y * ca, oL.z * sa + oU.z * ca};
+            break;
+        default:
+            break;
+        }
+    }
+```
+
+This first 3D implemented cylinders to connect points for simplicitity, but was later to be changed to something that had more of a justification for its implementation. 
+Nevertheless, the implementation looked like the following:
+```
+void BuildBranchMesh(Segment[] segments, int count)
+    {
+        if (Keyboard.current.spaceKey.wasPressedThisFrame)
+        List<Vector3> vertices = new List<Vector3>();
+        List<int> triangles = new List<int>();
+        List<Vector3> normals = new List<Vector3>();
+
+        for (int i = 0; i < count; i++)
+        {
+            Vector3 a = ToUnityVector(segments[i].a);
+            Vector3 b = ToUnityVector(segments[i].b);
+
+            float radius = segments[i].radius * Mathf.Lerp(1f, 0.25f, i / (float)count);
+
+            AddCylinder(
+                a,
+                b,
+                radius,
+                radialSegments,
+                vertices,
+                triangles,
+                normals
+            );
+        }
+
+        Mesh mesh = new Mesh
+        {
+            indexFormat = UnityEngine.Rendering.IndexFormat.UInt32
+        };
+
+        mesh.SetVertices(vertices);
+        mesh.SetTriangles(triangles, 0);
+        mesh.SetNormals(normals);
+        mesh.RecalculateBounds();
+
+        mf.mesh = mesh;
+    }
+```
+
+An example of a 3-Dimensional plant can be found in the next section.
+
+### INTERMISSION - How does a basic L-System work?
+What Prusinkiewicz et al and related works fundamentally argue, is that the way plants grow is neither unpredictable or inimitable, but rather in accordance to 
+algorithms of various complexities that we ourselves can imitate.
+
+When building an L-System, we apply certain rules to certain symbols, imagined as a turtle moving around (by convention).
+- F means go forward one segment
+- \+ mean turn left a certain amount of degrees degrees
+- [ means to start a new branch
+- etc.
+
+This plant above follows a very simply rule:  `F :- F[+F]F[-F]F`  
+This tells us that *for every segment F, go forward; start a new branch, turn left, and go forward; go forward; start a new branch, turn right, and go forward; and finally go forward again*. By writing more and more sophisticated rules, we can create more and more sophisticated plants.  
+
+### 2026 April 14 \- The first plant  
+Before an evaluation can take place, there needs to be something to evaluate. The current short-term goal for the project was at this point to implement both a basic, 
+2-Dimenstional plant, and to be able to have it be shown in Unity (with the use of LineRenderer). This first instance, and its growth stages, can be shown below.
+
+![First version in 2D](Assets/PlantSim2DV01.gif)
+
+
+## Some Update Highlights
+### 2026 April 12 \- Project Start  
+The feedback to the first project specification draft was returned, allowing goals beyond the implementation aspect to be set.
+The focus was consequently set on evaluating the algorithm and its implementation. This was investigated from the following perspectives
+- Speed, in terms of how quickly flora could be generated
+- Memory, in terms of how expensive a floral instance is
+- Realism, in terms of how well the structure of real flora is captured by the L-System  
+
+These aspects were then taken from the individual level of one plant, to investigating how scaling to many more floral instances affects them.

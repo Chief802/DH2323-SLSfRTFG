@@ -13,10 +13,6 @@ Working around these limitations to generate flora in real-time is the primary m
 
 Supervisor: [Professor and director of the Embodied Social Agents Lab (ESAL) Dr. Christopher Peters](https://www.kth.se/profile/chpeters)
 
-Video Demo: WIP.
-
-Full Report: WIP.
-
 ## Implementation
 This study's implementation is in three major parts:
 - The axioms describing how different species of flora are grown, as can be found in GenerateFlora3D.cpp

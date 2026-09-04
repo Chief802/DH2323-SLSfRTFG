@@ -41,7 +41,7 @@ static int BuildCapsellaBursaPastoris(int iters, PlantNode *out, int maxNodes, u
                 Symbol('A')};
         }});
 
-    // p3: Floral apex producing raceme inflorescence with flowers and heart pods
+    // p3: Floral apex producing raceme inflorescence with bud->flower->fruit sequence X(5)
     sys.AddRule(ProductionRule{
         'A', 1.0f, nullptr,
         [](const std::vector<float> &)
@@ -53,7 +53,6 @@ static int BuildCapsellaBursaPastoris(int iters, PlantNode *out, int maxNodes, u
                 Symbol('F', {0.1f}), Symbol('F', {0.1f}),
                 Symbol('I', {10.0f}), Symbol('I', {5.0f}),
                 Symbol('X', {5.0f}),
-                Symbol('K'), Symbol('K'), Symbol('K'), Symbol('K'),
                 Symbol(']'),
                 Symbol('/', {137.5f}),
                 Symbol('I', {8.0f}),
@@ -106,7 +105,13 @@ static int BuildCapsellaBursaPastoris(int iters, PlantNode *out, int maxNodes, u
     sys.AddRule('K', [](const std::vector<float> &)
                 { return Sentence{Symbol('@', {0.12f}), Symbol('/', {90.0f})}; });
 
-    // p10 & p11: Heart-shaped silique maturation -> Emits fruit pod primitive 'x'
+    // New explicit bud terminal rules
+    sys.AddRule('b', [](const std::vector<float> &p)
+                { return Sentence{Symbol('b', {p.empty() ? 0.08f : p[0]})}; });
+    sys.AddRule('o', [](const std::vector<float> &p)
+                { return Sentence{Symbol('o', {p.empty() ? 0.10f : p[0]})}; });
+
+    // p10 & p11: Heart-shaped silique and floral organ maturation X(t)
     sys.AddRule(ProductionRule{
         'X', 1.0f,
         [](const std::vector<float> &p)
@@ -122,7 +127,7 @@ static int BuildCapsellaBursaPastoris(int iters, PlantNode *out, int maxNodes, u
         { return p.empty() || p[0] <= 0; },
         [](const std::vector<float> &)
         {
-            return Sentence{Symbol('x', {0.22f})};
+            return Sentence{Symbol('X', {0.0f})};
         }});
 
     // Axiom: Initial internode I(9) + Vegetative growing tip a(13)
@@ -151,10 +156,7 @@ static int BuildStochasticCapsellaBursaPastoris(int iters, PlantNode *out, int m
 {
     LSystem sys(seed);
 
-    // ---------------------------------------------------------
     // 1. Vegetative Apex (a)
-    // ---------------------------------------------------------
-    // 70% chance: Standard basal rosette leaf generation
     sys.AddRule(ProductionRule{
         'a', 0.70f,
         [](const std::vector<float> &p)
@@ -169,7 +171,6 @@ static int BuildStochasticCapsellaBursaPastoris(int iters, PlantNode *out, int m
                 Symbol('a', {t - 1.0f})};
         }});
 
-    // 30% chance: Irregular spacing and divergence angle
     sys.AddRule(ProductionRule{
         'a', 0.30f,
         [](const std::vector<float> &p)
@@ -179,12 +180,11 @@ static int BuildStochasticCapsellaBursaPastoris(int iters, PlantNode *out, int m
             float t = p[0];
             return Sentence{
                 Symbol('['), Symbol('&', {60.0f}), Symbol('L'), Symbol(']'),
-                Symbol('/', {145.0f}), // Altered divergence
-                Symbol('I', {8.0f}),   // Shorter main branch internode
+                Symbol('/', {145.0f}),
+                Symbol('I', {8.0f}),
                 Symbol('a', {t - 1.0f})};
         }});
 
-    // Transition to floral apex (Deterministic)
     sys.AddRule(ProductionRule{
         'a', 1.0f,
         [](const std::vector<float> &p)
@@ -198,10 +198,7 @@ static int BuildStochasticCapsellaBursaPastoris(int iters, PlantNode *out, int m
                 Symbol('A')};
         }});
 
-    // ---------------------------------------------------------
-    // 2. Floral Apex (A) - Raceme Inflorescence
-    // ---------------------------------------------------------
-    // 60% chance: Standard 4-petal flower with normal branch spacing
+    // 2. Floral Apex (A) - Raceme Inflorescence with maturation X(t)
     sys.AddRule(ProductionRule{
         'A', 0.60f, nullptr,
         [](const std::vector<float> &)
@@ -213,14 +210,12 @@ static int BuildStochasticCapsellaBursaPastoris(int iters, PlantNode *out, int m
                 Symbol('F', {0.1f}), Symbol('F', {0.1f}),
                 Symbol('I', {10.0f}), Symbol('I', {5.0f}),
                 Symbol('X', {5.0f}),
-                Symbol('K'), Symbol('K'), Symbol('K'), Symbol('K'),
                 Symbol(']'),
                 Symbol('/', {137.5f}),
                 Symbol('I', {8.0f}),
                 Symbol('A')};
         }});
 
-    // 20% chance: 3-petal mutation, stunted pedicel, tight spacing
     sys.AddRule(ProductionRule{
         'A', 0.20f, nullptr,
         [](const std::vector<float> &)
@@ -232,14 +227,12 @@ static int BuildStochasticCapsellaBursaPastoris(int iters, PlantNode *out, int m
                 Symbol('F', {0.1f}), Symbol('F', {0.05f}),
                 Symbol('I', {8.0f}), Symbol('I', {4.0f}),
                 Symbol('X', {4.0f}),
-                Symbol('K'), Symbol('K'), Symbol('K'),
                 Symbol(']'),
                 Symbol('/', {120.0f}),
-                Symbol('I', {6.0f}), // Tighter offshoot generation
+                Symbol('I', {6.0f}),
                 Symbol('A')};
         }});
 
-    // 20% chance: 5-petal mutation, heavy fruit pod, wide spacing
     sys.AddRule(ProductionRule{
         'A', 0.20f, nullptr,
         [](const std::vector<float> &)
@@ -251,17 +244,13 @@ static int BuildStochasticCapsellaBursaPastoris(int iters, PlantNode *out, int m
                 Symbol('F', {0.12f}), Symbol('F', {0.12f}),
                 Symbol('I', {12.0f}), Symbol('I', {6.0f}),
                 Symbol('X', {6.0f}),
-                Symbol('K'), Symbol('K'), Symbol('K'), Symbol('K'), Symbol('K'),
                 Symbol(']'),
                 Symbol('/', {150.0f}),
-                Symbol('I', {10.0f}), // Wider offshoot generation
+                Symbol('I', {10.0f}),
                 Symbol('A')};
         }});
 
-    // ---------------------------------------------------------
     // 3. Stem Internode Elongation (I)
-    // ---------------------------------------------------------
-    // 80% chance for standard elongation, 20% chance for stunted growth
     sys.AddRule(ProductionRule{
         'I', 0.80f,
         [](const std::vector<float> &p)
@@ -288,9 +277,7 @@ static int BuildStochasticCapsellaBursaPastoris(int iters, PlantNode *out, int m
         [](const std::vector<float> &)
         { return Sentence{Symbol('F', {0.10f})}; }});
 
-    // ---------------------------------------------------------
-    // 4. Deterministic Terminals (Pedicels, Leaves, Petals, Fruit)
-    // ---------------------------------------------------------
+    // 4. Terminals
     sys.AddRule(ProductionRule{
         'u', 1.0f,
         [](const std::vector<float> &p)
@@ -310,6 +297,11 @@ static int BuildStochasticCapsellaBursaPastoris(int iters, PlantNode *out, int m
     sys.AddRule('K', [](const std::vector<float> &)
                 { return Sentence{Symbol('@', {0.12f}), Symbol('/', {90.0f})}; });
 
+    sys.AddRule('b', [](const std::vector<float> &p)
+                { return Sentence{Symbol('b', {p.empty() ? 0.08f : p[0]})}; });
+    sys.AddRule('o', [](const std::vector<float> &p)
+                { return Sentence{Symbol('o', {p.empty() ? 0.10f : p[0]})}; });
+
     sys.AddRule(ProductionRule{
         'X', 1.0f,
         [](const std::vector<float> &p)
@@ -321,11 +313,8 @@ static int BuildStochasticCapsellaBursaPastoris(int iters, PlantNode *out, int m
         [](const std::vector<float> &p)
         { return p.empty() || p[0] <= 0; },
         [](const std::vector<float> &)
-        { return Sentence{Symbol('x', {0.22f})}; }});
+        { return Sentence{Symbol('X', {0.0f})}; }});
 
-    // ---------------------------------------------------------
-    // Axiom & Generation
-    // ---------------------------------------------------------
     Sentence axiom{
         Symbol('!', {params.baseRadius}),
         Symbol('I', {9.0f}),
@@ -337,7 +326,6 @@ static int BuildStochasticCapsellaBursaPastoris(int iters, PlantNode *out, int m
               << " nodes=" << result.size()
               << " seed=" << seed << "\n";
 
-    // Rely on base default parameters, falling back to unity struct if absent
     return InterpretFull(result, params.defaultStep, params.defaultAngleDeg, out, maxNodes, params.baseRadius, params.radiusDecay);
 }
 
@@ -520,104 +508,231 @@ static int BuildABOPTree(int iters, PlantNode *out, int maxNodes, unsigned int s
 }
 
 // =============================================================
-//  Campanula rapunculoides (creeping bellflower) Implementation
+//  Mycelis muralis - Model III (Context-Sensitive / Signal Flow)
 // =============================================================
-// Direct transcription of the dL-system in the supplied figure:
-//
-//   initial string: F_a(x0,n0)
-//
-//   F_a(x,n):
-//     x < x_th              -> developmental growth, dx/dt = v, dn/dt = 0
-//     x = x_th, n > 0       -> F_i(kx) [ +(alpha0) @ K ] F_a((1-k)x,n-1)
-//     x = x_th, n = 0       -> F_i(x) @ K
-//
-// The continuous ODEs are discretized by one developmental increment per
-// L-system derivation step.  F_i(x) is represented by the existing F(x)
-// turtle command.  The existing engine reserves '@' as a flower primitive,
-// so a small C terminal is used for the leaf part of the illustrated @K
-// foliage pair; K remains the flower terminal.
-static int BuildCampanulaRapunculoides(
-    int iters, PlantNode *out, int maxNodes, unsigned int seed, const PlantParams &params)
+static int BuildMycelisMuralis(int iters, PlantNode *out, int maxNodes, unsigned int seed, const PlantParams &params)
 {
-    LSystem sys(seed);
+    Sentence cur = { Symbol('I', {20.0f}), Symbol('F'), Symbol('A', {0.0f}) };
 
-    // The figure gives the symbolic parameters but not numerical values.
-    // These are exposed here as model defaults rather than changing the
-    // public PlantParams ABI.
-    constexpr float x0 = 0.20f;       // initial developmental length
-    constexpr float xth = 1.00f;      // threshold at which a node is produced
-    constexpr float v = 0.40f;        // dx per L-system step (Euler discretization)
-    constexpr float n0 = 6.0f;       // number of remaining lateral units
-    constexpr float k = 0.50f;        // fraction allocated to current internode
-    constexpr float alpha0 = 35.0f;  // lateral divergence angle, degrees
-
-    // F_a(x,n), x = x_th and n > 0:
-    sys.AddRule(ProductionRule{
-        'a', 1.0f,
-        [xth](const std::vector<float> &p) {
-            return p.size() >= 2 && p[0] >= xth && p[1] > 0.0f;
-        },
-        [k, alpha0](const std::vector<float> &p) {
-            const float x = p[0];
-            const float n = p[1];
-
-            return Sentence{
-                Symbol('F', {k * x}),
-                Symbol('['),
-                    Symbol('+', {alpha0}),
-                    Symbol('L', {0.65f}), // Replaced 'C' with 'L' to emit Leaf nodes
-                    Symbol('K', {0.0f}),  // Flower terminal
-                Symbol(']'),
-                Symbol('a', {(1.0f - k) * x, n - 1.0f})
-            };
+    // Scanner for Left Context
+    auto getLeftContext = [](const Sentence& s, int idx) -> char {
+        int skip = 0;
+        for (int i = idx - 1; i >= 0; --i) {
+            char c = s[i].letter;
+            if (c == ']') skip++;
+            else if (c == '[') {
+                if (skip > 0) skip--;
+            }
+            else if (skip == 0) {
+                // W is strictly required here to prevent T from skipping the 1-step delay
+                if (c == 'M' || c == 'S' || c == 'T' || c == 'V' || c == 'W') return c;
+            }
         }
-    });
+        return '\0';
+    };
 
-    // F_a(x,n), x = x_th and n = 0:
-    sys.AddRule(ProductionRule{
-        'a', 1.0f,
-        [xth](const std::vector<float> &p) {
-            return p.size() >= 2 && p[0] >= xth && p[1] <= 0.0f;
-        },
-        [](const std::vector<float> &p) {
-            const float x = p[0];
-            return Sentence{
-                Symbol('F', {x}),
-                Symbol('L', {0.65f}), // Replaced 'C' with 'L'
-                Symbol('K', {0.0f})
-            };
+    // Scanner for Right Context
+    auto getRightContext = [](const Sentence& s, int idx) -> char {
+        int skip = 0;
+        for (int i = idx + 1; i < (int)s.size(); ++i) {
+            char c = s[i].letter;
+            if (c == '[') skip++;
+            else if (c == ']') {
+                if (skip > 0) skip--;
+                else return '\0'; 
+            }
+            else if (skip == 0) {
+                // W is strictly required here as well
+                if (c == 'M' || c == 'S' || c == 'T' || c == 'V' || c == 'W') return c;
+            }
         }
-    });
+        return '\0';
+    };
 
-    // F_a(x,n), x < x_th -> developmental growth, dx/dt = v
-    sys.AddRule(ProductionRule{
-        'a', 1.0f,
-        [xth](const std::vector<float> &p) {
-            return !p.empty() && p[0] < xth;
-        },
-        [v](const std::vector<float> &p) {
-            float x = p[0];
-            float n = (p.size() >= 2) ? p[1] : 0.0f;
-            return Sentence{ Symbol('a', {x + v, n}) };
+    for (int i = 0; i < iters; ++i) {
+        Sentence next;
+        next.reserve(cur.size() * 2);
+
+        for (int j = 0; j < (int)cur.size(); ++j) {
+            const Symbol& sym = cur[j];
+            char lc = getLeftContext(cur, j);
+            char rc = getRightContext(cur, j);
+
+            if (sym.letter == 'A') {
+                float t = sym.param(0, 0.0f);
+                if (lc == 'S' || lc == 'V') { // p1, p2
+                    next.push_back(Symbol('T'));
+                    next.push_back(Symbol('V'));
+                    next.push_back(Symbol('K'));
+                } else if (t > 0) { // p3
+                    next.push_back(Symbol('A', {t - 1.0f}));
+                } else { // p4
+                    next.push_back(Symbol('M'));
+                    // Missing foliage rule natively injected to support the Unity renderer
+                    next.push_back(Symbol('['));
+                    next.push_back(Symbol('~')); 
+                    next.push_back(Symbol(']'));
+                    
+                    next.push_back(Symbol('['));
+                    next.push_back(Symbol('+', {30.0f}));
+                    next.push_back(Symbol('G'));
+                    next.push_back(Symbol(']'));
+                    next.push_back(Symbol('F')); 
+                    next.push_back(Symbol('/', {180.0f}));
+                    next.push_back(Symbol('A', {2.0f}));
+                }
+            } else if (sym.letter == 'M') {
+                if (lc == 'S' || lc == 'V') next.push_back(Symbol('S')); // p5, p8
+                else next.push_back(sym);
+            } else if (sym.letter == 'S') {
+                if (rc == 'T') next.push_back(Symbol('T')); // p6
+                else next.push_back(sym);
+            } else if (sym.letter == 'T') {
+                if (rc == 'V') next.push_back(Symbol('W')); // p9
+                else next.push_back(sym);
+            } else if (sym.letter == 'G') {
+                if (lc == 'T') { // p7
+                    next.push_back(Symbol('F'));
+                    next.push_back(Symbol('A', {2.0f}));
+                } else {
+                    next.push_back(sym);
+                }
+            } else if (sym.letter == 'W') { // p10
+                next.push_back(Symbol('V'));
+            } else if (sym.letter == 'I') {
+                float t = sym.param(0, 0.0f);
+                if (t > 0) next.push_back(Symbol('I', {t - 1.0f})); // p11
+                else next.push_back(Symbol('S')); // p12
+            } else {
+                next.push_back(sym); 
+            }
         }
-    });
+        cur = std::move(next);
+    }
 
-    Sentence axiom{ Symbol('a', {x0, n0}) };
+    std::cout << "[MycelisMuralis] iter=" << iters << " nodes=" << cur.size() << "\n";
+    return InterpretFull(cur, params.defaultStep, params.defaultAngleDeg, out, maxNodes, params.baseRadius, params.radiusDecay);
+}
 
-    Sentence result = sys.Generate(axiom, iters);
+// =============================================================
+//  Stochastic 3D Mycelis muralis - Model III 
+// =============================================================
+static int BuildStochasticMycelisMuralis3D(int iters, PlantNode *out, int maxNodes, unsigned int seed, const PlantParams &params)
+{
+    // Initialize RNG based on the deterministic seed passed from Unity
+    std::mt19937 rng(seed);
+    std::uniform_real_distribution<float> probDist(0.0f, 1.0f);
+    std::uniform_real_distribution<float> pitchDist(20.0f, 45.0f);
+    std::uniform_real_distribution<float> rollDist(110.0f, 160.0f);
 
-    std::cout << "[CampanulaRapunculoides] iter=" << iters
-              << " nodes=" << result.size()
-              << " seed=" << seed << "\n";
+    Sentence cur = { Symbol('I', {20.0f}), Symbol('F'), Symbol('A', {0.0f}) };
 
-    return InterpretFull(
-        result,
-        params.defaultStep,
-        params.defaultAngleDeg,
-        out,
-        maxNodes,
-        params.baseRadius,
-        params.radiusDecay);
+    // Scanner for Left Context
+    auto getLeftContext = [](const Sentence& s, int idx) -> char {
+        int skip = 0;
+        for (int i = idx - 1; i >= 0; --i) {
+            char c = s[i].letter;
+            if (c == ']') skip++;
+            else if (c == '[') {
+                if (skip > 0) skip--;
+            }
+            else if (skip == 0) {
+                if (c == 'M' || c == 'S' || c == 'T' || c == 'V' || c == 'W') return c;
+            }
+        }
+        return '\0';
+    };
+
+    // Scanner for Right Context
+    auto getRightContext = [](const Sentence& s, int idx) -> char {
+        int skip = 0;
+        for (int i = idx + 1; i < (int)s.size(); ++i) {
+            char c = s[i].letter;
+            if (c == '[') skip++;
+            else if (c == ']') {
+                if (skip > 0) skip--;
+                else return '\0'; 
+            }
+            else if (skip == 0) {
+                if (c == 'M' || c == 'S' || c == 'T' || c == 'V' || c == 'W') return c;
+            }
+        }
+        return '\0';
+    };
+
+    for (int i = 0; i < iters; ++i) {
+        Sentence next;
+        next.reserve(cur.size() * 2);
+
+        for (int j = 0; j < (int)cur.size(); ++j) {
+            const Symbol& sym = cur[j];
+            char lc = getLeftContext(cur, j);
+            char rc = getRightContext(cur, j);
+
+            if (sym.letter == 'A') {
+                float t = sym.param(0, 0.0f);
+                if (lc == 'S' || lc == 'V') { // Apical flower transformation & Signal emission
+                    next.push_back(Symbol('T'));
+                    next.push_back(Symbol('V'));
+                    next.push_back(Symbol('K'));
+                } else if (t > 0) { // Apex aging
+                    next.push_back(Symbol('A', {t - 1.0f}));
+                } else { 
+                    // p4: Lateral branch initiation (Now Stochastic & 3D)
+                    next.push_back(Symbol('M')); // M MUST always spawn to pass signals
+                    
+                    // Foliage is always generated at the node
+                    next.push_back(Symbol('['));
+                    next.push_back(Symbol('~')); 
+                    next.push_back(Symbol(']'));
+
+                    // 75% chance to actually spawn a lateral branching apex
+                    if (probDist(rng) < 0.75f) { 
+                        next.push_back(Symbol('['));
+                        next.push_back(Symbol('+', {pitchDist(rng)}));
+                        next.push_back(Symbol('G'));
+                        next.push_back(Symbol(']'));
+                    }
+
+                    // 3D Roll/Divergence and main stem extension
+                    next.push_back(Symbol('F')); 
+                    next.push_back(Symbol('/', {rollDist(rng)}));
+
+                    // 20% chance to slightly delay the next apex phase for organic irregularity
+                    float nextDelay = probDist(rng) < 0.20f ? 3.0f : 2.0f;
+                    next.push_back(Symbol('A', {nextDelay}));
+                }
+            } else if (sym.letter == 'M') {
+                if (lc == 'S' || lc == 'V') next.push_back(Symbol('S'));
+                else next.push_back(sym);
+            } else if (sym.letter == 'S') {
+                if (rc == 'T') next.push_back(Symbol('T'));
+                else next.push_back(sym);
+            } else if (sym.letter == 'T') {
+                if (rc == 'V') next.push_back(Symbol('W'));
+                else next.push_back(sym);
+            } else if (sym.letter == 'G') {
+                if (lc == 'T') {
+                    next.push_back(Symbol('F'));
+                    next.push_back(Symbol('A', {2.0f}));
+                } else {
+                    next.push_back(sym);
+                }
+            } else if (sym.letter == 'W') { 
+                next.push_back(Symbol('V'));
+            } else if (sym.letter == 'I') {
+                float t = sym.param(0, 0.0f);
+                if (t > 0) next.push_back(Symbol('I', {t - 1.0f})); 
+                else next.push_back(Symbol('S')); 
+            } else {
+                next.push_back(sym); 
+            }
+        }
+        cur = std::move(next);
+    }
+
+    std::cout << "[StochasticMycelis3D] iter=" << iters << " nodes=" << cur.size() << "\n";
+    return InterpretFull(cur, params.defaultStep, params.defaultAngleDeg, out, maxNodes, params.baseRadius, params.radiusDecay);
 }
 
 // =============================================================
@@ -625,7 +740,6 @@ static int BuildCampanulaRapunculoides(
 // =============================================================
 extern "C"
 {
-
     PLANTSIM_API int GeneratePlant(
         int exampleId, int iterations,
         PlantNode *outNodes, int maxNodes, unsigned int seed,
@@ -642,7 +756,10 @@ extern "C"
         case 3:
             return BuildABOPTree(iterations, outNodes, maxNodes, seed, params);
         case 4:
-            return BuildCampanulaRapunculoides(iterations, outNodes, maxNodes, seed, params);
+            return BuildMycelisMuralis(iterations, outNodes, maxNodes, seed, params);
+        case 5:
+            return BuildStochasticMycelisMuralis3D(iterations, outNodes, maxNodes, seed, params);
+
         default:
             std::cerr << "[GeneratePlant] Unknown exampleId: " << exampleId << "\n";
             return 0;

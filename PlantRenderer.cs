@@ -54,8 +54,7 @@ private PlantParams plantSettings = new()
     }
 
     /// <summary>Defines the biological category of a generated node.</summary>
-    public enum NodeType : int { Branch = 0, Leaf = 1, Flower = 2, Fruit = 3 }
-
+    public enum NodeType : int { Branch = 0, Leaf = 1, Flower = 2, Fruit = 3, Bud = 4, BudOpening = 5 }
     /// <summary>
     /// Represents a single segment or element of the plant, mapped directly to the native C++ struct.
     /// </summary>
@@ -202,7 +201,7 @@ private PlantParams plantSettings = new()
     }
 
     // Configuration Enums
-    public enum TreeType { CapsellaBursaPastoris = 0, StochasticCapsellaBursaPastoris = 1, Crocus = 2, ABOPTree = 3, CampanulaRapunculoides = 4 }
+    public enum TreeType { CapsellaBursaPastoris = 0, StochasticCapsellaBursaPastoris = 1, Crocus = 2, ABOPTree = 3, MycelisMuralis = 4, StochasticMycelisMuralis3D = 5 }
     public enum LeafShape { Teardrop, Oval, Compound, Needle, LobedRosette, Cordate }
     public enum FlowerShape { FivePetal, Daisy, Cup, StarBurst, CrossFourPetal, Bell }
 
@@ -213,8 +212,8 @@ private PlantParams plantSettings = new()
         [TreeType.StochasticCapsellaBursaPastoris] = (LeafShape.LobedRosette, FlowerShape.CrossFourPetal),
         [TreeType.Crocus] = (LeafShape.Needle, FlowerShape.Cup),
         [TreeType.ABOPTree] = (LeafShape.Compound, FlowerShape.StarBurst),
-        [TreeType.CampanulaRapunculoides] = (LeafShape.Cordate, FlowerShape.Bell), };
-
+        [TreeType.MycelisMuralis] = (LeafShape.LobedRosette, FlowerShape.Daisy),
+        [TreeType.StochasticMycelisMuralis3D] = (LeafShape.LobedRosette, FlowerShape.Daisy)};
     /// <summary>Settings to dictate mesh resolution at various camera distances.</summary>
     [Serializable]
     public struct LodSettings
@@ -245,6 +244,10 @@ private PlantParams plantSettings = new()
     public float flowerScale = 1.0f;
     [Range(0f, 1f)] public float petalCurvature = 0.3f;
     public Material flowerMaterial;
+
+    [Header("Bud Geometry")]
+    public float budScale = 1.0f;
+    public Material budMaterial;
 
     [Header("Fruit Geometry")]
     public float fruitScale = 1.0f;
@@ -278,6 +281,8 @@ private PlantParams plantSettings = new()
     List<PlantNode> _curLeaves = new();
     List<PlantNode> _curFlowers = new();
     List<PlantNode> _curFruits = new();
+    List<PlantNode> _curBuds = new();
+    List<PlantNode> _curBudsOpening = new();
     BranchGraph _cachedGraph;
 
     readonly HashSet<ulong> _knownHashes = new();
@@ -301,15 +306,19 @@ private PlantParams plantSettings = new()
      * This prevents having to push hundreds of thousands of vertices to the GPU every frame 
      * during a growth animation; only the new/growing segments update dynamically.
      */
-    Mesh _stableBranchMesh, _growingBranchMesh;
+Mesh _stableBranchMesh, _growingBranchMesh;
     Mesh _stableLeafMesh, _growingLeafMesh;
     Mesh _stableFlowerMesh, _growingFlowerMesh;
     Mesh _stableFruitMesh, _growingFruitMesh;
+    Mesh _stableBudMesh, _growingBudMesh;
+    Mesh _stableBudOpeningMesh, _growingBudOpeningMesh;
 
     GameObject _stableBranchGO, _growingBranchGO;
     GameObject _stableLeafGO, _growingLeafGO;
     GameObject _stableFlowerGO, _growingFlowerGO;
     GameObject _stableFruitGO, _growingFruitGO;
+    GameObject _stableBudGO, _growingBudGO;
+    GameObject _stableBudOpeningGO, _growingBudOpeningGO;
 
     /// <summary>External call to the native C++ library handling the mathematical L-System generation.</summary>
     [DllImport("libPlantSim", CallingConvention = CallingConvention.Cdecl)]
@@ -332,6 +341,10 @@ private PlantParams plantSettings = new()
         _growingFlowerMesh = CreateMesh("Flowers-Growing", true);
         _stableFruitMesh = CreateMesh("Fruits-Stable", false);
         _growingFruitMesh = CreateMesh("Fruits-Growing", true);
+        _stableBudMesh = CreateMesh("Buds-Stable", false);
+        _growingBudMesh = CreateMesh("Buds-Growing", true);
+        _stableBudOpeningMesh = CreateMesh("BudsOpening-Stable", false);
+        _growingBudOpeningMesh = CreateMesh("BudsOpening-Growing", true);
 
         // Bind meshes to visible GameObjects
         _stableBranchGO = MakeChild("Branches-Stable", _stableBranchMesh, branchMaterial);
@@ -342,7 +355,10 @@ private PlantParams plantSettings = new()
         _growingFlowerGO = MakeChild("Flowers-Growing", _growingFlowerMesh, flowerMaterial);
         _stableFruitGO = MakeChild("Fruits-Stable", _stableFruitMesh, fruitMaterial);
         _growingFruitGO = MakeChild("Fruits-Growing", _growingFruitMesh, fruitMaterial);
-
+        _stableBudGO = MakeChild("Buds-Stable", _stableBudMesh, budMaterial ?? leafMaterial);
+        _growingBudGO = MakeChild("Buds-Growing", _growingBudMesh, budMaterial ?? leafMaterial);
+        _stableBudOpeningGO = MakeChild("BudsOpening-Stable", _stableBudOpeningMesh, budMaterial ?? flowerMaterial);
+        _growingBudOpeningGO = MakeChild("BudsOpening-Growing", _growingBudOpeningMesh, budMaterial ?? flowerMaterial);
         _currentRadialSegs = radialSegments;
     }
 
@@ -456,6 +472,8 @@ private PlantParams plantSettings = new()
         _curLeaves.Clear();
         _curFlowers.Clear();
         _curFruits.Clear();
+        _curBuds.Clear();
+        _curBudsOpening.Clear();
 
         // 2. Sort nodes by type
         for (int i = 0; i < count; i++)
@@ -465,6 +483,8 @@ private PlantParams plantSettings = new()
                 case NodeType.Leaf: _curLeaves.Add(_nodeBuffer[i]); break;
                 case NodeType.Flower: _curFlowers.Add(_nodeBuffer[i]); break;
                 case NodeType.Fruit: _curFruits.Add(_nodeBuffer[i]); break;
+                case NodeType.Bud: _curBuds.Add(_nodeBuffer[i]); break;
+                case NodeType.BudOpening: _curBudsOpening.Add(_nodeBuffer[i]); break;
             }
 
         // 3. Build topologic relationships between branches
@@ -482,7 +502,9 @@ private PlantParams plantSettings = new()
             BuildLeafMesh(_curLeaves, leafShape, leafDetail, true, FilterMode.OnlyOld, _stableLeafMesh);
             BuildFlowerMesh(_curFlowers, flowerShape, true, FilterMode.OnlyOld, _stableFlowerMesh);
             BuildFruitMesh(_curFruits, true, FilterMode.OnlyOld, _stableFruitMesh);
-
+            BuildBudMesh(_curBuds, 0, true, FilterMode.OnlyOld, _stableBudMesh);
+            BuildBudMesh(_curBudsOpening, 1, true, FilterMode.OnlyOld, _stableBudOpeningMesh);
+            
             RefreshKnownHashes();
             _animProgress = 0f;
             _growthCoroutine = StartCoroutine(GrowthAnimation());
@@ -505,6 +527,8 @@ private PlantParams plantSettings = new()
         foreach (var n in _curLeaves) _knownHashes.Add(NodeHash(n));
         foreach (var n in _curFlowers) _knownHashes.Add(NodeHash(n));
         foreach (var n in _curFruits) _knownHashes.Add(NodeHash(n));
+        foreach (var n in _curBuds) _knownHashes.Add(NodeHash(n));
+        foreach (var n in _curBudsOpening) _knownHashes.Add(NodeHash(n));
     }
 
     /// <summary>
@@ -590,6 +614,8 @@ private PlantParams plantSettings = new()
         AssignFoliage(_curLeaves);
         AssignFoliage(_curFlowers);
         AssignFoliage(_curFruits);
+        AssignFoliage(_curBuds);
+        AssignFoliage(_curBudsOpening);
     }
 
     /// <summary>Coroutine handling the frame-by-frame mesh update of "new" segments.</summary>
@@ -609,7 +635,8 @@ private PlantParams plantSettings = new()
             BuildLeafMesh(_curLeaves, leafShape, leafDetail, false, FilterMode.OnlyNew, _growingLeafMesh);
             BuildFlowerMesh(_curFlowers, flowerShape, false, FilterMode.OnlyNew, _growingFlowerMesh);
             BuildFruitMesh(_curFruits, false, FilterMode.OnlyNew, _growingFruitMesh);
-
+            BuildBudMesh(_curBuds, 0, false, FilterMode.OnlyNew, _growingBudMesh);
+            BuildBudMesh(_curBudsOpening, 1, false, FilterMode.OnlyNew, _growingBudOpeningMesh);
             yield return null;
         }
 
@@ -630,11 +657,15 @@ private PlantParams plantSettings = new()
         BuildLeafMesh(_curLeaves, leafShape, leafDetail, true, FilterMode.All, _stableLeafMesh);
         BuildFlowerMesh(_curFlowers, flowerShape, true, FilterMode.All, _stableFlowerMesh);
         BuildFruitMesh(_curFruits, true, FilterMode.All, _stableFruitMesh);
+        BuildBudMesh(_curBuds, 0, true, FilterMode.All, _stableBudMesh);
+        BuildBudMesh(_curBudsOpening, 1, true, FilterMode.All, _stableBudOpeningMesh);
 
         _growingBranchMesh.Clear();
         _growingLeafMesh.Clear();
         _growingFlowerMesh.Clear();
         _growingFruitMesh.Clear();
+        _growingBudMesh.Clear();
+        _growingBudOpeningMesh.Clear();
     }
 
     /// <summary>Gets the 0 to 1 normalized growth state of a node based on current animation time.</summary>
@@ -820,6 +851,36 @@ private PlantParams plantSettings = new()
         FlushToMesh(targetMesh);
     }
 
+    void BuildBudMesh(List<PlantNode> nodes, int stage, bool fullyGrown, FilterMode filter, Mesh targetMesh)
+    {
+        _verts.Clear(); _norms.Clear(); _uvs.Clear(); _tris.Clear();
+
+        foreach (var node in nodes)
+        {
+            ulong h = NodeHash(node);
+            bool isNew = _timeline.TryGetValue(h, out var a) && a.IsNew;
+
+            if (filter == FilterMode.OnlyOld && isNew) continue;
+            if (filter == FilterMode.OnlyNew && !isNew) continue;
+
+            float growT = fullyGrown ? 1f : GetGrowth(node, foliage: true);
+            if (growT < 0.01f) continue;
+
+            Vector3 pos = node.origin;
+            Vector3 fwd = ((Vector3)node.heading).normalized;
+            Vector3 right = ((Vector3)node.left).normalized;
+            Vector3 faceN = Vector3.Cross(fwd, right).normalized;
+            float size = node.radius * budScale * growT;
+
+            if (stage == 0)
+                EmitClosedBud(pos, fwd, right, faceN, size);
+            else
+                EmitOpeningBud(pos, fwd, right, faceN, size);
+        }
+
+        FlushToMesh(targetMesh);
+    }
+    
     /// <summary>Generates geometry for fruit depending on current tree type settings.</summary>
     void BuildFruitMesh(List<PlantNode> nodes, bool fullyGrown, FilterMode filter, Mesh targetMesh)
     {
@@ -933,6 +994,91 @@ private PlantParams plantSettings = new()
         EmitTeardrop(pos + fwd * len * 0.9f, fwd, right, n, size * 0.3f);
     }
 
+    void EmitClosedBud(Vector3 pos, Vector3 fwd, Vector3 right, Vector3 n, float size)
+    {
+        int sepals = 4;
+        float length = size * 1.2f;
+        float radius = size * 0.45f;
+        Vector3 apex = pos + fwd * length;
+        Vector3 up2 = Vector3.Cross(fwd, right).normalized;
+
+        int bApex = _verts.Count;
+        _verts.Add(apex); _norms.Add(fwd); _uvs.Add(new Vector2(0.5f, 1.0f));
+
+        int bBase = _verts.Count;
+        _verts.Add(pos); _norms.Add(-fwd); _uvs.Add(new Vector2(0.5f, 0.0f));
+
+        int ringStart = _verts.Count;
+        for (int i = 0; i < sepals; i++)
+        {
+            float a = i / (float)sepals * Mathf.PI * 2f;
+            Vector3 dir = (Mathf.Cos(a) * right + Mathf.Sin(a) * up2).normalized;
+            Vector3 ringPos = pos + fwd * (length * 0.45f) + dir * radius;
+            Vector3 norm = (dir + fwd * 0.3f).normalized;
+
+            _verts.Add(ringPos);
+            _norms.Add(norm);
+            _uvs.Add(new Vector2((float)i / sepals, 0.5f));
+        }
+
+        for (int i = 0; i < sepals; i++)
+        {
+            int nextI = (i + 1) % sepals;
+            int r0 = ringStart + i;
+            int r1 = ringStart + nextI;
+
+            _tris.Add(bBase); _tris.Add(r0); _tris.Add(r1);
+            _tris.Add(bBase); _tris.Add(r1); _tris.Add(r0);
+
+            _tris.Add(r0); _tris.Add(bApex); _tris.Add(r1);
+            _tris.Add(r0); _tris.Add(r1); _tris.Add(bApex);
+        }
+    }
+
+    void EmitOpeningBud(Vector3 pos, Vector3 fwd, Vector3 right, Vector3 n, float size)
+    {
+        int sepals = 4;
+        float length = size * 1.1f;
+        float radius = size * 0.55f;
+        Vector3 up2 = Vector3.Cross(fwd, right).normalized;
+
+        for (int i = 0; i < sepals; i++)
+        {
+            float a = i / (float)sepals * Mathf.PI * 2f;
+            Vector3 dir = (Mathf.Cos(a) * right + Mathf.Sin(a) * up2).normalized;
+            Vector3 lat = Vector3.Cross(dir, fwd).normalized;
+
+            Vector3 sepalBase = pos;
+            Vector3 sepalTip = pos + fwd * length + dir * (radius * 0.8f);
+            Vector3 norm = (dir + fwd * 0.2f).normalized;
+
+            int b = _verts.Count;
+            _verts.Add(sepalBase - lat * (radius * 0.3f));
+            _verts.Add(sepalBase + lat * (radius * 0.3f));
+            _verts.Add(sepalTip + lat * (radius * 0.2f));
+            _verts.Add(sepalTip - lat * (radius * 0.2f));
+
+            for (int k = 0; k < 4; k++) _norms.Add(norm);
+            _uvs.Add(new Vector2(0f, 0f)); _uvs.Add(new Vector2(1f, 0f));
+            _uvs.Add(new Vector2(1f, 1f)); _uvs.Add(new Vector2(0f, 1f));
+
+            _tris.Add(b); _tris.Add(b + 1); _tris.Add(b + 2);
+            _tris.Add(b); _tris.Add(b + 2); _tris.Add(b + 3);
+            _tris.Add(b); _tris.Add(b + 2); _tris.Add(b + 1);
+            _tris.Add(b); _tris.Add(b + 3); _tris.Add(b + 2);
+        }
+
+        Vector3 petalCenter = pos + fwd * (length * 0.6f);
+        float petalSize = size * 0.45f;
+        for (int p = 0; p < 4; p++)
+        {
+            float pa = (p * Mathf.PI * 0.5f) + (Mathf.PI * 0.25f);
+            Vector3 pd = (Mathf.Cos(pa) * right + Mathf.Sin(pa) * up2).normalized;
+            Vector3 pTip = petalCenter + fwd * (petalSize * 0.8f) + pd * (petalSize * 0.4f);
+            EmitTeardrop(petalCenter, (pTip - petalCenter).normalized, Vector3.Cross((pTip - petalCenter).normalized, fwd), fwd, petalSize);
+        }
+    }
+    
     /// <summary>Generates Brassicaceae 4-petal cross-shaped flower geometry.</summary>
     void EmitCrossFourPetal(Vector3 center, Vector3 axis, Vector3 right, Vector3 up2, float size)
     {

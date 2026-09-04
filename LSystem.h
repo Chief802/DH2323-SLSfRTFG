@@ -24,7 +24,9 @@ enum class NodeType : int
     Branch = 0,
     Leaf = 1,
     Flower = 2,
-    Fruit = 3
+    Fruit = 3,
+    Bud = 4,
+    BudOpening = 5
 };
 
 /**
@@ -37,7 +39,7 @@ enum class NodeType : int
  *   left     Vec3   12 B   turtle L at emission time  (leaf lateral axis)
  *   radius   float   4 B   branch cross-section radius, or leaf / flower billboard size
  *   type     int     4 B   NodeType cast to int
- */
+ **/
 struct PlantNode
 {
     Vec3 origin;
@@ -287,9 +289,26 @@ inline int InterpretFull(
 
         case '~': emit(NodeType::Leaf, sym.param(0, 0.3f), turtle.pos); break;
         case '@': emit(NodeType::Flower, sym.param(0, 0.15f), turtle.pos); break;
-        case 'x': emit(NodeType::Fruit, sym.param(0, 0.25f), turtle.pos); break;
+        case 'x': emit(NodeType::Fruit, sym.param(0, 0.22f), turtle.pos); break;
+        case 'b': emit(NodeType::Bud, sym.param(0, 0.08f), turtle.pos); break;
+        case 'o': emit(NodeType::BudOpening, sym.param(0, 0.10f), turtle.pos); break;
         case 'L': emit(NodeType::Leaf, sym.param(0, 0.0f) * 0.05f + 0.1f, turtle.pos); break;
         case 'K': emit(NodeType::Flower, sym.param(0, 0.0f) * 0.15f + 0.2f, turtle.pos); break;
+        case 'G': emit(NodeType::Bud, 0.08f, turtle.pos); break;
+        case 'A': emit(NodeType::BudOpening, 0.10f, turtle.pos); break;
+        case 'X':
+        {
+            float t = sym.param(0, 0.0f);
+            if (t >= 4.0f)
+                emit(NodeType::Bud, 0.08f, turtle.pos);
+            else if (t >= 2.0f)
+                emit(NodeType::BudOpening, 0.10f, turtle.pos);
+            else if (t > 0.0f)
+                emit(NodeType::Flower, 0.12f, turtle.pos);
+            else
+                emit(NodeType::Fruit, 0.22f, turtle.pos);
+            break;
+        }
         case '!': turtle.radius = sym.param(0, turtle.radius); break;
         case '+': RotateTurtle(turtle, 'U', angleOf(sym)); break;
         case '-': RotateTurtle(turtle, 'U', -angleOf(sym)); break;
@@ -301,7 +320,7 @@ inline int InterpretFull(
 
         case '[':
             stk.push(turtle);
-            turtle.radius *= radiusDecay; // Configurable pipe-model radius decay
+            turtle.radius *= radiusDecay;
             break;
         case ']':
             if (!stk.empty())

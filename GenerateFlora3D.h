@@ -21,17 +21,35 @@ extern "C" {
  * Plant generation parameters passed directly from Unity.
  */
 struct PlantParams {
-    float baseRadius;       // Base radius/width of main trunk
-    float radiusDecay;      // Scaling factor applied to radius at branches
-    float defaultStep;      // Default length per segment
-    float defaultAngleDeg;  // Default branching angle in degrees
+    // Core structural properties
+    float baseRadius;
+    float radiusDecay;
+    float defaultStep;
+    float defaultAngleDeg;
     
-    // --- ABOP Tree Parameters ---
-    float abop_d1; // Divergence angle 1
-    float abop_d2; // Divergence angle 2
-    float abop_a;  // Branching angle
-    float abop_lr; // Length elongation ratio
-    float abop_vr; // Radius fattening ratio
+    // Generic Growth Modifiers (Replaces abop_lr, abop_vr)
+    float elongationRatio; 
+    float fatteningRatio;  
+
+    // Universal Angular Configurations
+    float divergenceAngle1; 
+    float divergenceAngle2; 
+    float branchAngle1;     
+    float branchAngle2;     
+    float pitchAngle;       
+    float rollAngle;        
+
+    // Universal Dimensions & Scales
+    float internodeLen1;
+    float internodeLen2;
+    float leafSize;
+    float flowerSize;
+    float budSize;
+    float fruitSize;
+
+    // Stochastic Probabilities (0.0 to 1.0)
+    float probPrimary;
+    float probSecondary;
 };
 
 /**
